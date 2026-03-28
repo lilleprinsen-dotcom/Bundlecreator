@@ -306,8 +306,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					<?php if ( '' !== $image_prompt ) : ?>
 						<div class="lp-image-prompt-box">
 							<h2><?php echo esc_html__( 'Image Prompt for ChatGPT', 'lp-bundle-builder' ); ?></h2>
-							<p><?php echo esc_html__( 'Bruk denne prompten i ChatGPT sammen med bildene i lenkene under.', 'lp-bundle-builder' ); ?></p>
-							<p><?php echo esc_html__( 'For best resultat: åpne eller last opp kildebildene i samme chat, og lim inn prompten under.', 'lp-bundle-builder' ); ?></p>
+							<p><?php echo esc_html__( 'Denne prompten er laget for streng kompositering av de originale produktbildene.', 'lp-bundle-builder' ); ?></p>
+							<p><?php echo esc_html__( 'Målet er å kombinere bildene, ikke å generere nye produktversjoner.', 'lp-bundle-builder' ); ?></p>
 							<p><?php echo esc_html__( 'ChatGPT skal kun komponere produktene i ett bundle-bilde, ikke endre selve produktene.', 'lp-bundle-builder' ); ?></p>
 							<p class="lp-image-prompt-actions">
 								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $created_id . '&action=edit' ) ); ?>" class="button button-secondary"><?php echo esc_html__( 'Open product', 'lp-bundle-builder' ); ?></a>
@@ -1605,24 +1605,44 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			$lines   = array();
-			$lines[] = 'Create one finished square ecommerce bundle product image for: ' . $bundle_name . '.';
+			$lines[] = 'Create one finished square ecommerce bundle image for: ' . $bundle_name . ' by compositing the exact provided source product photos.';
+			$lines[] = 'This must be a clean product-image composite / photomontage, not a newly rendered product scene.';
+			$lines[] = 'Use the original source photos as the actual visual content.';
 			$lines[] = '';
 			$lines[] = 'If working in ChatGPT, use the uploaded source images or the exact source image URLs below as the only visual source material.';
-			$lines[] = 'Use only the provided source product images and/or source image URLs below.';
-			$lines[] = 'Do not invent or redesign any part of the products.';
-			$lines[] = 'Do not change color, materials, proportions, construction, branding, or product details.';
-			$lines[] = 'Only remove background, reposition, scale proportionally, and compose the provided products into one clean ecommerce image.';
-			$lines[] = 'If something is not visible in the source images, do not guess or fabricate it.';
-			$lines[] = 'Accuracy is more important than creativity.';
 			$lines[] = '';
-			$lines[] = 'Hard constraints:';
-			$lines[] = '- Use ONLY the provided source product images and/or source image URLs below as source material.';
-			$lines[] = '- NEVER invent missing details.';
-			$lines[] = '- NEVER redesign products or make fantasy versions.';
-			$lines[] = '- NEVER change materials, colors, proportions, construction, wheels, handles, fabrics, accessories, branding, or shape.';
-			$lines[] = '- NEVER add objects that are not present in the source images.';
-			$lines[] = '- Do not create new camera angles that require invented geometry.';
-			$lines[] = '- Allowed edits only: cut out/remove background, move, layer, position, scale proportionally, and lightly fade secondary items when compositionally useful.';
+			$lines[] = 'Non-negotiable identity and realism rules:';
+			$lines[] = '- Use ONLY the provided source product photos and/or source image URLs below.';
+			$lines[] = '- Do not generate a new stroller, bassinet, frame, wheel set, canopy, handlebar, seat, or accessory.';
+			$lines[] = '- Do not substitute the products with a similar model or a different brand/model.';
+			$lines[] = '- Do not reinterpret the products.';
+			$lines[] = '- Do not recreate them from scratch.';
+			$lines[] = '- Do not render a new version.';
+			$lines[] = '- Do not merge the products into a different design.';
+			$lines[] = '- Do not simplify or restyle product details.';
+			$lines[] = '- Do not replace any visible product feature with a cleaner or more premium-looking version.';
+			$lines[] = '- The final result must clearly remain the exact same products from the source photos.';
+			$lines[] = '';
+			$lines[] = 'Camera angle and geometry lock:';
+			$lines[] = '- Keep each product in its original camera angle from the source photo.';
+			$lines[] = '- Do not invent a new viewing angle.';
+			$lines[] = '- Do not rotate products into a new perspective.';
+			$lines[] = '- Do not reconstruct hidden geometry.';
+			$lines[] = '- Do not fabricate surfaces or sides that are not visible in the original source image.';
+			$lines[] = '- If a different angle would be required, do not do it.';
+			$lines[] = '';
+			$lines[] = 'Allowed edits only (strict):';
+			$lines[] = '- Background removal only.';
+			$lines[] = '- Cutout edge cleanup only.';
+			$lines[] = '- Move the cutouts.';
+			$lines[] = '- Proportional scaling.';
+			$lines[] = '- Stacking/layering of cutouts.';
+			$lines[] = '- Slight opacity reduction for a secondary product if needed.';
+			$lines[] = '- Very subtle shadow only when it naturally results from compositing.';
+			$lines[] = '- Forbidden: redrawing, inpainting missing parts, shape correction, changing trim/materials, changing wheel size or geometry, changing frame geometry, changing canopy shape, changing handles, changing branding placement.';
+			$lines[] = '';
+			$lines[] = 'Safe fallback layout rule:';
+			$lines[] = '- If you cannot preserve the products exactly while overlapping them, place them side by side on the same light background instead of inventing or altering anything.';
 			$lines[] = '';
 			$lines[] = 'Visual style (premium Scandinavian ecommerce bundle image):';
 			$lines[] = '- Square format';
@@ -1635,11 +1655,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$lines[] = '- One product may be the main hero item in front';
 			$lines[] = '- Secondary items may be behind, beside, or slightly faded';
 			$lines[] = '';
-			$lines[] = 'Composition freedom (limited):';
-			$lines[] = '- You may choose the most natural and visually balanced arrangement.';
-			$lines[] = '- You may decide which product is visually dominant based on size/composition.';
-			$lines[] = '- You may place secondary products behind or beside the main product.';
-			$lines[] = '- But all products must be preserved exactly as they appear in the source images.';
+			$lines[] = 'Composition freedom (strictly limited):';
+			$lines[] = '- You may only choose placement, scale, layering order, and spacing.';
+			$lines[] = '- You may decide which product is in front only by arranging the provided cutouts.';
+			$lines[] = '- You may not change the products themselves in any way.';
+			$lines[] = '- Freedom applies only to layout, not to product appearance.';
 			$lines[] = '';
 			$lines[] = 'Output constraints:';
 			$lines[] = '- Output one finished square bundle image only.';
@@ -1649,6 +1669,16 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$lines[] = '- No humans.';
 			$lines[] = '- No environment.';
 			$lines[] = '- No fantasy styling.';
+			$lines[] = '';
+			$lines[] = 'Summary:';
+			$lines[] = '- Use exact source photos';
+			$lines[] = '- Keep exact product identity';
+			$lines[] = '- Keep exact camera angle';
+			$lines[] = '- No substitution';
+			$lines[] = '- No redesign';
+			$lines[] = '- No re-render';
+			$lines[] = '- No invented geometry';
+			$lines[] = '- If necessary, do a simple side-by-side composite';
 			$lines[] = '';
 			$lines[] = 'Source images:';
 
