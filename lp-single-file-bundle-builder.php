@@ -283,6 +283,16 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			$created_id = isset( $_GET['lp_bundle_id'] ) ? absint( $_GET['lp_bundle_id'] ) : 0;
 			$defaults   = $this->get_builder_defaults();
+			$image_prompt = '';
+			$image_sources = array();
+			if ( $created_id > 0 ) {
+				$image_prompt_meta = get_post_meta( $created_id, '_lp_bundle_image_prompt', true );
+				$image_prompt = is_string( $image_prompt_meta ) ? trim( $image_prompt_meta ) : '';
+
+				$image_sources_meta = get_post_meta( $created_id, '_lp_bundle_image_sources', true );
+				$decoded_sources = json_decode( is_string( $image_sources_meta ) ? $image_sources_meta : '', true );
+				$image_sources = is_array( $decoded_sources ) ? $decoded_sources : array();
+			}
 			?>
 			<div class="wrap lp-bundle-builder-wrap">
 				<h1><?php echo esc_html__( 'Bundle Builder', 'lp-bundle-builder' ); ?></h1>
@@ -293,6 +303,41 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						<?php echo esc_html__( 'Bundle opprettet.', 'lp-bundle-builder' ); ?>
 						<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $created_id . '&action=edit' ) ); ?>"><?php echo esc_html__( 'Åpne produktet', 'lp-bundle-builder' ); ?></a>
 					</p></div>
+					<?php if ( '' !== $image_prompt ) : ?>
+						<div class="lp-image-prompt-box">
+							<h2><?php echo esc_html__( 'Image Prompt for ChatGPT', 'lp-bundle-builder' ); ?></h2>
+							<p><?php echo esc_html__( 'Bruk denne prompten i ChatGPT sammen med produktbildene under.', 'lp-bundle-builder' ); ?></p>
+							<p><?php echo esc_html__( 'ChatGPT skal kun komponere produktene i ett bundle-bilde, ikke endre selve produktene.', 'lp-bundle-builder' ); ?></p>
+							<p class="lp-image-prompt-actions">
+								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $created_id . '&action=edit' ) ); ?>" class="button button-secondary"><?php echo esc_html__( 'Open product', 'lp-bundle-builder' ); ?></a>
+								<button type="button" class="button button-primary" id="lp-copy-image-prompt"><?php echo esc_html__( 'Copy image prompt', 'lp-bundle-builder' ); ?></button>
+								<button type="button" class="button" id="lp-select-image-prompt"><?php echo esc_html__( 'Select all', 'lp-bundle-builder' ); ?></button>
+							</p>
+							<textarea id="lp-image-prompt-textarea" class="large-text code" rows="18" readonly><?php echo esc_textarea( $image_prompt ); ?></textarea>
+							<?php if ( ! empty( $image_sources ) ) : ?>
+								<h3><?php echo esc_html__( 'Kildebilder', 'lp-bundle-builder' ); ?></h3>
+								<ul class="lp-image-source-list">
+									<?php foreach ( $image_sources as $source ) : ?>
+										<?php
+										$source_name = isset( $source['name'] ) ? (string) $source['name'] : '';
+										$source_url  = isset( $source['featured_image_url'] ) ? (string) $source['featured_image_url'] : '';
+										if ( '' === $source_url ) {
+											continue;
+										}
+										$source_qty = isset( $source['quantity'] ) ? (int) $source['quantity'] : 1;
+										?>
+										<li>
+											<?php echo esc_html( $source_name ); ?>
+											<?php if ( $source_qty > 1 ) : ?>
+												(<?php echo esc_html( sprintf( __( 'qty %d', 'lp-bundle-builder' ), $source_qty ) ); ?>)
+											<?php endif; ?>
+											— <a href="<?php echo esc_url( $source_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_url ); ?></a>
+										</li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+						</div>
+					<?php endif; ?>
 				<?php endif; ?>
 
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="lp-bundle-builder-form">
@@ -446,6 +491,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 				.lp-part-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 				.lp-part-error { color: #b32d2e; font-size: 12px; margin-top: 4px; display: none; }
+				.lp-image-prompt-box {
+					background: #fff;
+					border: 1px solid #ccd0d4;
+					border-left: 4px solid #2271b1;
+					padding: 16px;
+					margin: 16px 0;
+				}
+				.lp-image-prompt-actions { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+				.lp-image-source-list { list-style: disc; margin-left: 20px; }
 			</style>
 
 			<script>
@@ -460,7 +514,33 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				const addPartButton = document.getElementById('lp_add_part');
 				const partsOverview = document.getElementById('lp_parts_overview');
 				const partsInput = document.getElementById('lp_parts_json');
+				const imagePromptTextarea = document.getElementById('lp-image-prompt-textarea');
+				const copyImagePromptButton = document.getElementById('lp-copy-image-prompt');
+				const selectImagePromptButton = document.getElementById('lp-select-image-prompt');
 				let parts = [];
+
+				async function copyTextareaContent(textarea){
+					if (!textarea) {
+						return false;
+					}
+					const value = textarea.value || '';
+					if (!value) {
+						return false;
+					}
+					if (navigator.clipboard && window.isSecureContext) {
+						try {
+							await navigator.clipboard.writeText(value);
+							return true;
+						} catch (e) {}
+					}
+					textarea.focus();
+					textarea.select();
+					try {
+						return document.execCommand('copy');
+					} catch (e) {
+						return false;
+					}
+				}
 
 				function normalizeItem(item){
 					return {
@@ -683,6 +763,24 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					fixedPriceToggle.addEventListener('change', syncFixedPriceAmount);
 				}
 				syncFixedPriceAmount();
+
+				if (selectImagePromptButton && imagePromptTextarea) {
+					selectImagePromptButton.addEventListener('click', function(){
+						imagePromptTextarea.focus();
+						imagePromptTextarea.select();
+					});
+				}
+
+				if (copyImagePromptButton && imagePromptTextarea) {
+					copyImagePromptButton.addEventListener('click', async function(){
+						const ok = await copyTextareaContent(imagePromptTextarea);
+						const originalLabel = copyImagePromptButton.textContent;
+						copyImagePromptButton.textContent = ok ? 'Copied!' : 'Kunne ikke kopiere';
+						window.setTimeout(function(){
+							copyImagePromptButton.textContent = originalLabel;
+						}, 1800);
+					});
+				}
 
 				addPartButton.addEventListener('click', function(){
 					parts.push(emptyPart());
@@ -1183,6 +1281,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			$bundle = \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle::sync( $bundle, false );
 			$bundle->save();
+			$image_sources = $this->get_bundle_image_source_data( $default_data['rows'] );
+			$image_prompt  = $this->build_bundle_image_prompt( $bundle, $image_sources );
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_prompt', $image_prompt );
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_sources', wp_json_encode( $image_sources ) );
 
 			clean_post_cache( $bundle_post_id );
 
@@ -1388,6 +1490,139 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'default_products_total' => (float) wc_format_decimal( $default_total, wc_get_price_decimals() ),
 				'generated_sku'          => implode( '+', $generated_sku_parts ),
 			);
+		}
+
+		private function get_bundle_image_source_data( $default_products_rows ) {
+			$sources = array();
+			if ( ! is_array( $default_products_rows ) ) {
+				return $sources;
+			}
+
+			foreach ( $default_products_rows as $index => $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				$quantity   = isset( $row['qty'] ) ? (int) $row['qty'] : 1;
+				if ( $product_id <= 0 || $quantity <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+					continue;
+				}
+
+				$featured_id  = $product->get_image_id();
+				$featured_url = $featured_id ? wp_get_attachment_image_url( $featured_id, 'full' ) : '';
+				if ( '' === (string) $featured_url ) {
+					continue;
+				}
+
+				$gallery_urls = array();
+				$gallery_ids  = method_exists( $product, 'get_gallery_image_ids' ) ? (array) $product->get_gallery_image_ids() : array();
+				foreach ( $gallery_ids as $gallery_id ) {
+					$gallery_url = wp_get_attachment_image_url( (int) $gallery_id, 'full' );
+					if ( '' !== (string) $gallery_url ) {
+						$gallery_urls[] = $gallery_url;
+					}
+				}
+
+				$sources[] = array(
+					'index'              => $index + 1,
+					'product_id'         => (int) $product->get_id(),
+					'name'               => (string) $product->get_name(),
+					'sku'                => (string) $product->get_sku(),
+					'permalink'          => (string) $product->get_permalink(),
+					'featured_image_url' => (string) $featured_url,
+					'gallery_image_urls' => array_values( array_unique( $gallery_urls ) ),
+					'quantity'           => $quantity,
+				);
+			}
+
+			return $sources;
+		}
+
+		private function build_bundle_image_prompt( $bundle, $image_sources ) {
+			$bundle_name = '';
+			if ( $bundle && is_a( $bundle, 'WC_Product' ) ) {
+				$bundle_name = trim( (string) $bundle->get_name() );
+			}
+			if ( '' === $bundle_name ) {
+				$bundle_name = __( 'Bundle product', 'lp-bundle-builder' );
+			}
+
+			$lines   = array();
+			$lines[] = 'Create one finished square ecommerce bundle product image for: ' . $bundle_name . '.';
+			$lines[] = '';
+			$lines[] = 'Use only the attached source product images.';
+			$lines[] = 'Do not invent or redesign any part of the products.';
+			$lines[] = 'Do not change color, materials, proportions, construction, branding, or product details.';
+			$lines[] = 'Only remove background, reposition, scale proportionally, and compose the provided products into one clean ecommerce image.';
+			$lines[] = 'If something is not visible in the source images, do not guess or fabricate it.';
+			$lines[] = 'Accuracy is more important than creativity.';
+			$lines[] = '';
+			$lines[] = 'Hard constraints:';
+			$lines[] = '- Use ONLY the provided source product images as source material.';
+			$lines[] = '- NEVER invent missing details.';
+			$lines[] = '- NEVER redesign products or make fantasy versions.';
+			$lines[] = '- NEVER change materials, colors, proportions, construction, wheels, handles, fabrics, accessories, branding, or shape.';
+			$lines[] = '- NEVER add objects that are not present in the source images.';
+			$lines[] = '- Do not create new camera angles that require invented geometry.';
+			$lines[] = '- Allowed edits only: cut out/remove background, move, layer, position, scale proportionally, and lightly fade secondary items when compositionally useful.';
+			$lines[] = '';
+			$lines[] = 'Visual style (premium Scandinavian ecommerce bundle image):';
+			$lines[] = '- Square format';
+			$lines[] = '- Clean studio look';
+			$lines[] = '- Very light grey or soft neutral background';
+			$lines[] = '- No text, no added logos, no badges';
+			$lines[] = '- Realistic product proportions';
+			$lines[] = '- No dramatic or fake-looking shadows';
+			$lines[] = '- Polished webshop look';
+			$lines[] = '- One product may be the main hero item in front';
+			$lines[] = '- Secondary items may be behind, beside, or slightly faded';
+			$lines[] = '';
+			$lines[] = 'Composition freedom (limited):';
+			$lines[] = '- You may choose the most natural and visually balanced arrangement.';
+			$lines[] = '- You may decide which product is visually dominant based on size/composition.';
+			$lines[] = '- You may place secondary products behind or beside the main product.';
+			$lines[] = '- But all products must be preserved exactly as they appear in the source images.';
+			$lines[] = '';
+			$lines[] = 'Output constraints:';
+			$lines[] = '- Output one finished square bundle image only.';
+			$lines[] = '- Clean light background.';
+			$lines[] = '- No text.';
+			$lines[] = '- No extra props.';
+			$lines[] = '- No humans.';
+			$lines[] = '- No environment.';
+			$lines[] = '- No fantasy styling.';
+			$lines[] = '';
+			$lines[] = 'Source images:';
+
+			$source_count = 0;
+			if ( is_array( $image_sources ) ) {
+				foreach ( $image_sources as $source ) {
+					$url = isset( $source['featured_image_url'] ) ? trim( (string) $source['featured_image_url'] ) : '';
+					if ( '' === $url ) {
+						continue;
+					}
+					$source_count++;
+					$name = isset( $source['name'] ) ? trim( (string) $source['name'] ) : '';
+					$qty  = isset( $source['quantity'] ) ? (int) $source['quantity'] : 1;
+					if ( '' === $name ) {
+						$name = sprintf( 'Product %d', $source_count );
+					}
+					$line = sprintf( '- Product %1$d: %2$s — %3$s', $source_count, $name, $url );
+					if ( $qty > 1 ) {
+						$line .= sprintf( ' (Quantity: %d)', $qty );
+					}
+					$lines[] = $line;
+				}
+			}
+
+			if ( 0 === $source_count ) {
+				$lines[] = '- No product image URLs were found from validated default products.';
+				$lines[] = '- Ask the user to provide direct product image URLs, then repeat with the same strict constraints above.';
+			}
+
+			return implode( "\n", $lines );
 		}
 
 		private function is_valid_default_bundle_product( $product ) {
