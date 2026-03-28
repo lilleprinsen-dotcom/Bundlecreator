@@ -1261,7 +1261,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$bundle->set_sale_price( '' );
 				$bundle->set_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
 			}
-			$bundle->set_sku( (string) $default_data['generated_sku'] );
+			$this->set_bundle_sku_safely( $bundle, (string) $default_data['generated_sku'], $bundle_post_id );
 
 			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
@@ -1491,6 +1491,66 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'default_products_total' => (float) wc_format_decimal( $default_total, wc_get_price_decimals() ),
 				'generated_sku'          => implode( '+', $generated_sku_parts ),
 			);
+		}
+
+		private function set_bundle_sku_safely( $bundle, $suggested_sku, $bundle_post_id ) {
+			if ( ! $bundle || ! is_a( $bundle, 'WC_Product' ) ) {
+				return;
+			}
+
+			$sku_candidate = $this->truncate_sku( wc_clean( (string) $suggested_sku ) );
+			if ( '' === $sku_candidate || ! wc_product_has_unique_sku( $bundle_post_id, $sku_candidate ) ) {
+				$sku_candidate = $this->build_unique_bundle_sku_fallback( $bundle_post_id );
+			}
+
+			if ( '' === $sku_candidate ) {
+				return;
+			}
+
+			try {
+				$bundle->set_sku( $sku_candidate );
+			} catch ( \WC_Data_Exception $exception ) {
+				$fallback_sku = $this->build_unique_bundle_sku_fallback( $bundle_post_id );
+				if ( '' === $fallback_sku ) {
+					return;
+				}
+				try {
+					$bundle->set_sku( $fallback_sku );
+				} catch ( \WC_Data_Exception $ignored_exception ) {
+					return;
+				}
+			}
+		}
+
+		private function build_unique_bundle_sku_fallback( $bundle_post_id ) {
+			$base = $this->truncate_sku( wc_clean( 'BUNDLE-' . absint( $bundle_post_id ) ) );
+			if ( '' === $base ) {
+				return '';
+			}
+
+			if ( wc_product_has_unique_sku( $bundle_post_id, $base ) ) {
+				return $base;
+			}
+
+			for ( $attempt = 1; $attempt <= 20; $attempt++ ) {
+				$candidate = $this->truncate_sku( $base . '-' . wp_rand( 100, 999 ) );
+				if ( '' !== $candidate && wc_product_has_unique_sku( $bundle_post_id, $candidate ) ) {
+					return $candidate;
+				}
+			}
+
+			return '';
+		}
+
+		private function truncate_sku( $sku ) {
+			$sku = (string) $sku;
+			if ( '' === $sku ) {
+				return '';
+			}
+			if ( strlen( $sku ) <= 100 ) {
+				return $sku;
+			}
+			return substr( $sku, 0, 100 );
 		}
 
 		private function get_bundle_image_source_data( $default_products_rows ) {
