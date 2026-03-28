@@ -1262,6 +1262,24 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$bundle->set_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
 			}
 			$this->set_bundle_sku_safely( $bundle, (string) $default_data['generated_sku'], $bundle_post_id );
+			$combined_description = $this->build_bundle_combined_description( $default_data['rows'] );
+			if ( '' !== $combined_description ) {
+				$bundle->set_description( $combined_description );
+			}
+
+			$intro_sentence = $this->build_bundle_intro_sentence( $default_data['rows'] );
+			if ( '' !== $intro_sentence ) {
+				$bundle->set_short_description( wp_kses_post( '<p>' . esc_html( $intro_sentence ) . '</p>' ) );
+			}
+
+			$bundle_media_data = $this->get_bundle_media_data( $default_data['rows'] );
+			$featured_image_id = isset( $bundle_media_data['featured_image_id'] ) ? absint( $bundle_media_data['featured_image_id'] ) : 0;
+			$gallery_image_ids = isset( $bundle_media_data['gallery_image_ids'] ) ? $this->sanitize_unique_positive_int_array( $bundle_media_data['gallery_image_ids'] ) : array();
+
+			if ( $featured_image_id > 0 && (int) $bundle->get_image_id() <= 0 ) {
+				$bundle->set_image_id( $featured_image_id );
+			}
+			$bundle->set_gallery_image_ids( $gallery_image_ids );
 
 			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
@@ -1551,6 +1569,225 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				return $sku;
 			}
 			return substr( $sku, 0, 100 );
+		}
+
+		private function get_bundle_media_data( $default_products_rows ) {
+			$ordered_image_ids = array();
+			$seen_image_ids    = array();
+
+			if ( ! is_array( $default_products_rows ) ) {
+				return array(
+					'featured_image_id' => 0,
+					'gallery_image_ids' => array(),
+				);
+			}
+
+			foreach ( $default_products_rows as $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				if ( $product_id <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+					continue;
+				}
+
+				$product_image_ids = $this->get_product_media_ids( $product );
+				foreach ( $product_image_ids as $image_id ) {
+					if ( isset( $seen_image_ids[ $image_id ] ) ) {
+						continue;
+					}
+					$seen_image_ids[ $image_id ] = true;
+					$ordered_image_ids[]         = $image_id;
+				}
+			}
+
+			$featured_image_id = ! empty( $ordered_image_ids ) ? (int) $ordered_image_ids[0] : 0;
+			$gallery_image_ids = ! empty( $ordered_image_ids ) ? array_slice( $ordered_image_ids, 1 ) : array();
+
+			return array(
+				'featured_image_id' => $featured_image_id,
+				'gallery_image_ids' => array_values( $gallery_image_ids ),
+			);
+		}
+
+		private function get_product_media_ids( $product ) {
+			$media_ids = array();
+
+			if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+				return $media_ids;
+			}
+
+			$product_featured_id = $this->get_valid_attachment_id( $product->get_image_id() );
+			if ( $product_featured_id > 0 ) {
+				$media_ids[] = $product_featured_id;
+			}
+
+			$product_gallery_ids = $this->sanitize_attachment_ids( $product->get_gallery_image_ids() );
+			$media_ids           = array_merge( $media_ids, $product_gallery_ids );
+
+			if ( $product->is_type( 'variation' ) ) {
+				$parent_id      = (int) $product->get_parent_id();
+				$parent_product = $parent_id > 0 ? wc_get_product( $parent_id ) : false;
+
+				if ( ! $product_featured_id && $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+					$parent_featured_id = $this->get_valid_attachment_id( $parent_product->get_image_id() );
+					if ( $parent_featured_id > 0 ) {
+						$media_ids[] = $parent_featured_id;
+					}
+				}
+
+				if ( empty( $product_gallery_ids ) && $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+					$parent_gallery_ids = $this->sanitize_attachment_ids( $parent_product->get_gallery_image_ids() );
+					if ( ! empty( $parent_gallery_ids ) ) {
+						$media_ids = array_merge( $media_ids, $parent_gallery_ids );
+					}
+				}
+			}
+
+			$media_ids = $this->sanitize_attachment_ids( $media_ids );
+			return array_values( array_unique( $media_ids ) );
+		}
+
+		private function sanitize_attachment_ids( $ids ) {
+			$valid_ids = array();
+			foreach ( (array) $ids as $id ) {
+				$attachment_id = $this->get_valid_attachment_id( $id );
+				if ( $attachment_id > 0 ) {
+					$valid_ids[] = $attachment_id;
+				}
+			}
+			return array_values( array_unique( $valid_ids ) );
+		}
+
+		private function get_valid_attachment_id( $attachment_id ) {
+			$attachment_id = absint( $attachment_id );
+			if ( $attachment_id <= 0 ) {
+				return 0;
+			}
+
+			$url = wp_get_attachment_image_url( $attachment_id, 'full' );
+			return '' !== (string) $url ? $attachment_id : 0;
+		}
+
+		private function build_bundle_combined_description( $default_products_rows ) {
+			if ( ! is_array( $default_products_rows ) || empty( $default_products_rows ) ) {
+				return '';
+			}
+
+			$intro_sentence = $this->build_bundle_intro_sentence( $default_products_rows );
+			$sections       = array();
+
+			foreach ( $default_products_rows as $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				if ( $product_id <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+					continue;
+				}
+
+				$long_description  = trim( (string) $product->get_description() );
+				$short_description = trim( (string) $product->get_short_description() );
+
+				$normalized_long  = wp_strip_all_tags( $long_description );
+				$normalized_short = wp_strip_all_tags( $short_description );
+				$is_same_text     = '' !== $normalized_long && '' !== $normalized_short && $normalized_long === $normalized_short;
+
+				$body_parts = array();
+				if ( '' !== $long_description ) {
+					$body_parts[] = wp_kses_post( $long_description );
+				}
+				if ( '' !== $short_description && ! $is_same_text ) {
+					$body_parts[] = wp_kses_post( $short_description );
+				}
+
+				if ( empty( $body_parts ) ) {
+					continue;
+				}
+
+				$section  = '<h3>' . esc_html( $product->get_name() ) . '</h3>';
+				$section .= "\n" . implode( "\n\n", $body_parts );
+				$sections[] = $section;
+			}
+
+			$parts   = array( '<p>' . esc_html( $intro_sentence ) . '</p>' );
+			if ( ! empty( $sections ) ) {
+				$parts[] = implode( "\n\n", $sections );
+			}
+
+			return wp_kses_post( implode( "\n\n", $parts ) );
+		}
+
+		private function build_bundle_intro_sentence( $default_products_rows ) {
+			$name_list = $this->build_bundle_product_name_list( $default_products_rows );
+			if ( empty( $name_list ) ) {
+				return '';
+			}
+
+			return sprintf( 'Pakke bestående av %s.', $this->join_norwegian_list( $name_list ) );
+		}
+
+		private function build_bundle_product_name_list( $default_products_rows ) {
+			$names = array();
+			if ( ! is_array( $default_products_rows ) ) {
+				return $names;
+			}
+
+			foreach ( $default_products_rows as $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				$quantity   = isset( $row['qty'] ) ? (int) $row['qty'] : 1;
+				if ( $product_id <= 0 || $quantity <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+					continue;
+				}
+
+				$name = trim( (string) $product->get_name() );
+				if ( '' === $name ) {
+					continue;
+				}
+
+				$names[] = $quantity > 1 ? sprintf( '%1$d x %2$s', $quantity, $name ) : $name;
+			}
+
+			return $names;
+		}
+
+		private function join_norwegian_list( $items ) {
+			$items = array_values(
+				array_filter(
+					array_map(
+						function( $item ) {
+							return trim( (string) $item );
+						},
+						(array) $items
+					),
+					function( $item ) {
+						return '' !== $item;
+					}
+				)
+			);
+
+			$count = count( $items );
+			if ( 0 === $count ) {
+				return '';
+			}
+			if ( 1 === $count ) {
+				return $items[0];
+			}
+			if ( 2 === $count ) {
+				return $items[0] . ' og ' . $items[1];
+			}
+
+			$last_item = array_pop( $items );
+			return implode( ', ', $items ) . ' og ' . $last_item;
 		}
 
 		private function get_bundle_image_source_data( $default_products_rows ) {
