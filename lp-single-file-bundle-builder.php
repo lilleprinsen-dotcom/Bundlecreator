@@ -102,6 +102,30 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								</td>
 							</tr>
 							<tr>
+								<th scope="row"><label for="lp_fixed_price"><?php echo esc_html__( 'Fast pris', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<label for="lp_fixed_price">
+										<input type="checkbox" id="lp_fixed_price" name="fixed_price" value="1" />
+										<?php echo esc_html__( 'Aktiver fast pris for bundlen', 'lp-bundle-builder' ); ?>
+									</label>
+									<p class="description"><?php echo esc_html__( 'Når aktivert settes fixed_price til true.', 'lp-bundle-builder' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_bundle_button_label"><?php echo esc_html__( 'Bundle-knappetekst (shop)', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<input
+										type="text"
+										class="regular-text"
+										id="lp_bundle_button_label"
+										name="bundle_button_label"
+										value="<?php echo esc_attr__( 'Configure bundle', 'lp-bundle-builder' ); ?>"
+										maxlength="120"
+									/>
+									<p class="description"><?php echo esc_html__( 'Teksten som vises på bundle-knappen i shop/listing.', 'lp-bundle-builder' ); ?></p>
+								</td>
+							</tr>
+							<tr>
 								<th scope="row"><label for="lp_product_search"><?php echo esc_html__( 'Legg til produkter', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<input type="search" class="regular-text" id="lp_product_search" placeholder="<?php echo esc_attr__( 'Søk etter produktnavn eller SKU', 'lp-bundle-builder' ); ?>" autocomplete="off" />
@@ -496,6 +520,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$title      = isset( $_POST['bundle_title'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_title'] ) ) : '';
 			$status_raw = isset( $_POST['bundle_status'] ) ? sanitize_key( wp_unslash( $_POST['bundle_status'] ) ) : 'draft';
 			$status     = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : 'draft';
+			$fixed_price = ! empty( $_POST['fixed_price'] ) ? 'true' : 'false';
+			$bundle_button_label = isset( $_POST['bundle_button_label'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_button_label'] ) ) : '';
+			if ( '' === $bundle_button_label ) {
+				$bundle_button_label = 'Configure bundle';
+			}
 			$product_ids = isset( $_POST['product_ids'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['product_ids'] ) ) : array();
 			$product_ids = array_values( array_unique( array_filter( $product_ids ) ) );
 
@@ -570,7 +599,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'individual_theme'         => 'false',
 				'theme'                    => 'grid_1',
 				'theme_size'               => 'medium',
-				'fixed_price'              => 'false',
+				'fixed_price'              => $fixed_price,
 				'include_parent_price'     => 'false',
 				'shipping_fee_calculation' => 'bundle',
 				'min_items_quantity'       => '',
@@ -583,7 +612,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'default_products'         => wp_json_encode( $default_products ),
 				'loop_add_to_cart'         => $loop_add_to_cart ? 'true' : 'false',
 				'sync_stock_quantity'      => 'false',
-				'bundle_button_label'      => 'Configure bundle',
+				'bundle_button_label'      => $bundle_button_label,
 			);
 
 			$errors = $bundle->set_props( $props );
