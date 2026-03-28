@@ -776,7 +776,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					return array();
 				}
 
-				$query = new \WP_Query(
+				$text_query = new \WP_Query(
 					array(
 						'post_type'      => array( 'product', 'product_variation' ),
 						'post_status'    => array( 'publish', 'private' ),
@@ -788,9 +788,35 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						'no_found_rows'  => true,
 					)
 				);
-				if ( ! empty( $query->posts ) && is_array( $query->posts ) ) {
-					$product_ids = array_map( 'absint', $query->posts );
+
+				if ( ! empty( $text_query->posts ) && is_array( $text_query->posts ) ) {
+					$product_ids = array_merge( $product_ids, array_map( 'absint', $text_query->posts ) );
 				}
+
+				$sku_query = new \WP_Query(
+					array(
+						'post_type'      => array( 'product', 'product_variation' ),
+						'post_status'    => array( 'publish', 'private' ),
+						'posts_per_page' => 30,
+						'fields'         => 'ids',
+						'orderby'        => 'date',
+						'order'          => 'DESC',
+						'no_found_rows'  => true,
+						'meta_query'     => array(
+							array(
+								'key'     => '_sku',
+								'value'   => $search_term,
+								'compare' => 'LIKE',
+							),
+						),
+					)
+				);
+
+				if ( ! empty( $sku_query->posts ) && is_array( $sku_query->posts ) ) {
+					$product_ids = array_merge( $product_ids, array_map( 'absint', $sku_query->posts ) );
+				}
+
+				$product_ids = $this->sanitize_unique_positive_int_array( $product_ids );
 			}
 
 			if ( empty( $product_ids ) ) {
@@ -804,18 +830,35 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					continue;
 				}
 
-				$name = $product->get_name();
-				$sku  = (string) $product->get_sku();
-				$label = '' !== $sku ? sprintf( '%1$s (%2$s)', $sku, $name ) : sprintf( '(%s)', $name );
-
 				$results[] = array(
 					'value'      => (int) $product->get_id(),
-					'label'      => $label,
+					'label'      => $this->build_fallback_product_label( $product ),
 					'isDisabled' => false,
 				);
 			}
 
 			return $results;
+		}
+
+		private function build_fallback_product_label( $product ) {
+			$name = '';
+			if ( $product && is_a( $product, 'WC_Product' ) ) {
+				$name = trim( (string) $product->get_name() );
+			}
+
+			if ( $product && $product->is_type( 'variation' ) ) {
+				$variation_name = trim( (string) wc_get_formatted_variation( $product, true, false, true ) );
+				if ( '' !== $variation_name ) {
+					$name .= ( '' !== $name ? ' - ' : '' ) . $variation_name;
+				}
+			}
+
+			$sku = $product ? trim( (string) $product->get_sku() ) : '';
+			if ( '' !== $sku ) {
+				return sprintf( '%1$s (%2$s)', $sku, $name );
+			}
+
+			return $name;
 		}
 
 		private function fallback_term_items( $taxonomy, $search, $items, $mode ) {
@@ -824,9 +867,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'hide_empty' => false,
 				'number'     => 30,
 			);
+			$requested_ids = array();
 
 			if ( 'fetch' === $mode ) {
-				$args['include'] = $this->sanitize_unique_positive_int_array( $items );
+				$requested_ids = $this->sanitize_unique_positive_int_array( $items );
+				$args['include'] = $requested_ids;
 				if ( empty( $args['include'] ) ) {
 					return array();
 				}
@@ -841,6 +886,24 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$terms = get_terms( $args );
 			if ( is_wp_error( $terms ) || ! is_array( $terms ) || empty( $terms ) ) {
 				return array();
+			}
+
+			if ( 'fetch' === $mode && ! empty( $requested_ids ) ) {
+				$terms_map = array();
+				foreach ( $terms as $term ) {
+					if ( ! $term instanceof \WP_Term ) {
+						continue;
+					}
+					$terms_map[ (int) $term->term_id ] = $term;
+				}
+
+				$ordered_terms = array();
+				foreach ( $requested_ids as $term_id ) {
+					if ( isset( $terms_map[ $term_id ] ) ) {
+						$ordered_terms[] = $terms_map[ $term_id ];
+					}
+				}
+				$terms = $ordered_terms;
 			}
 
 			$results = array();
