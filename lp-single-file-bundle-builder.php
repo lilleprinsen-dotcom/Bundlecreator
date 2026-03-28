@@ -73,6 +73,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return array(
 				'product_status'       => 'draft',
 				'fixed_price'          => 'false',
+				'fixed_price_amount'   => '',
 				'bundle_button_label'  => 'Configure bundle',
 				'sync_stock_quantity'  => 'false',
 				'manage_stock'         => 'no',
@@ -83,6 +84,20 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 		private function normalize_true_false_string( $value ) {
 			return ( 'true' === strtolower( (string) $value ) || '1' === (string) $value || true === $value ) ? 'true' : 'false';
+		}
+
+		private function sanitize_decimal_string( $value ) {
+			$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+			if ( '' === $value ) {
+				return '';
+			}
+
+			$value = str_replace( ',', '.', $value );
+			if ( ! is_numeric( $value ) ) {
+				return '';
+			}
+
+			return wc_format_decimal( $value, wc_get_price_decimals() );
 		}
 
 		private function sanitize_defaults_option( $raw_defaults ) {
@@ -109,6 +124,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$tax_status = isset( $raw_defaults['tax_status'] ) ? sanitize_key( $raw_defaults['tax_status'] ) : $defaults['tax_status'];
 			$tax_status = in_array( $tax_status, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status : $defaults['tax_status'];
 
+			$fixed_price_amount = isset( $raw_defaults['fixed_price_amount'] ) ? $this->sanitize_decimal_string( $raw_defaults['fixed_price_amount'] ) : $defaults['fixed_price_amount'];
+
 			return array(
 				'product_status'      => $product_status,
 				'fixed_price'         => $fixed_price,
@@ -117,6 +134,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'manage_stock'        => $manage_stock,
 				'stock_status'        => $stock_status,
 				'tax_status'          => $tax_status,
+				'fixed_price_amount'  => $fixed_price_amount,
 			);
 		}
 
@@ -135,6 +153,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$raw_defaults = array(
 				'product_status'      => isset( $_POST['product_status'] ) ? wp_unslash( $_POST['product_status'] ) : '',
 				'fixed_price'         => isset( $_POST['fixed_price'] ) ? 'true' : 'false',
+				'fixed_price_amount'  => isset( $_POST['fixed_price_amount'] ) ? wp_unslash( $_POST['fixed_price_amount'] ) : '',
 				'bundle_button_label' => isset( $_POST['bundle_button_label'] ) ? wp_unslash( $_POST['bundle_button_label'] ) : '',
 				'sync_stock_quantity' => isset( $_POST['sync_stock_quantity'] ) ? 'true' : 'false',
 				'manage_stock'        => isset( $_POST['manage_stock'] ) ? wp_unslash( $_POST['manage_stock'] ) : '',
@@ -185,6 +204,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_default_fixed_price"><?php echo esc_html__( 'Fixed price default', 'lp-bundle-builder' ); ?></label></th>
 								<td><label><input type="checkbox" id="lp_default_fixed_price" name="fixed_price" value="1" <?php checked( $defaults['fixed_price'], 'true' ); ?> /> <?php echo esc_html__( 'Enable fixed price by default', 'lp-bundle-builder' ); ?></label></td>
 							</tr>
+							<tr id="lp_default_fixed_price_amount_row">
+								<th scope="row"><label for="lp_default_fixed_price_amount"><?php echo esc_html__( 'Fixed price amount default', 'lp-bundle-builder' ); ?></label></th>
+								<td><input type="number" class="small-text" id="lp_default_fixed_price_amount" name="fixed_price_amount" value="<?php echo esc_attr( $defaults['fixed_price_amount'] ); ?>" min="0" step="0.01" /></td>
+							</tr>
 							<tr>
 								<th scope="row"><label for="lp_default_bundle_button_label"><?php echo esc_html__( 'Bundle button label default', 'lp-bundle-builder' ); ?></label></th>
 								<td><input type="text" class="regular-text" id="lp_default_bundle_button_label" name="bundle_button_label" value="<?php echo esc_attr( $defaults['bundle_button_label'] ); ?>" maxlength="120" /></td>
@@ -226,6 +249,23 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					</table>
 					<?php submit_button( __( 'Save defaults', 'lp-bundle-builder' ) ); ?>
 				</form>
+				<script>
+				(function(){
+					const fixedPrice = document.getElementById('lp_default_fixed_price');
+					const amountRow = document.getElementById('lp_default_fixed_price_amount_row');
+					const amountInput = document.getElementById('lp_default_fixed_price_amount');
+					if (!fixedPrice || !amountRow || !amountInput) {
+						return;
+					}
+					function syncFixedAmountVisibility(){
+						const enabled = !!fixedPrice.checked;
+						amountRow.style.display = enabled ? '' : 'none';
+						amountInput.disabled = !enabled;
+					}
+					fixedPrice.addEventListener('change', syncFixedAmountVisibility);
+					syncFixedAmountVisibility();
+				})();
+				</script>
 			</div>
 			<?php
 		}
@@ -285,6 +325,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										<?php echo esc_html__( 'Aktiver fast pris for bundlen', 'lp-bundle-builder' ); ?>
 									</label>
 								</td>
+							</tr>
+							<tr id="lp_fixed_price_amount_row">
+								<th scope="row"><label for="lp_fixed_price_amount"><?php echo esc_html__( 'Fixed price amount', 'lp-bundle-builder' ); ?></label></th>
+								<td><input type="number" class="small-text" id="lp_fixed_price_amount" name="fixed_price_amount" value="<?php echo esc_attr( $defaults['fixed_price_amount'] ); ?>" min="0" step="0.01" /></td>
 							</tr>
 							<tr>
 								<th scope="row"><label for="lp_bundle_button_label"><?php echo esc_html__( 'Bundle-knappetekst (shop)', 'lp-bundle-builder' ); ?></label></th>
@@ -409,6 +453,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				const ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
 				const ajaxNonce = <?php echo wp_json_encode( wp_create_nonce( self::AJAX_NONCE_ACTION ) ); ?>;
 				const form = document.getElementById('lp-bundle-builder-form');
+				const fixedPriceToggle = document.getElementById('lp_fixed_price');
+				const fixedPriceAmountRow = document.getElementById('lp_fixed_price_amount_row');
+				const fixedPriceAmountInput = document.getElementById('lp_fixed_price_amount');
 				const partsContainer = document.getElementById('lp_parts_container');
 				const addPartButton = document.getElementById('lp_add_part');
 				const partsOverview = document.getElementById('lp_parts_overview');
@@ -622,6 +669,20 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					});
 					partsInput.value = JSON.stringify(serializeParts());
 				}
+
+				function syncFixedPriceAmount(){
+					if (!fixedPriceToggle || !fixedPriceAmountRow || !fixedPriceAmountInput) {
+						return;
+					}
+					const enabled = !!fixedPriceToggle.checked;
+					fixedPriceAmountRow.style.display = enabled ? '' : 'none';
+					fixedPriceAmountInput.disabled = !enabled;
+				}
+
+				if (fixedPriceToggle) {
+					fixedPriceToggle.addEventListener('change', syncFixedPriceAmount);
+				}
+				syncFixedPriceAmount();
 
 				addPartButton.addEventListener('click', function(){
 					parts.push(emptyPart());
@@ -964,6 +1025,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$status     = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : $defaults['product_status'];
 
 			$fixed_price = ! empty( $_POST['fixed_price'] ) ? 'true' : 'false';
+			$fixed_price_amount_raw = isset( $_POST['fixed_price_amount'] ) ? trim( (string) wp_unslash( $_POST['fixed_price_amount'] ) ) : '';
+			$fixed_price_amount = $this->sanitize_decimal_string( $fixed_price_amount_raw );
 			$sync_stock_quantity = ! empty( $_POST['sync_stock_quantity'] ) ? 'true' : 'false';
 
 			$bundle_button_label = isset( $_POST['bundle_button_label'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_button_label'] ) ) : $defaults['bundle_button_label'];
@@ -1034,6 +1097,34 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				);
 			}
 
+			$default_products_total = isset( $default_data['default_products_total'] ) ? (float) $default_data['default_products_total'] : 0.0;
+			$default_products_total = (float) wc_format_decimal( $default_products_total, wc_get_price_decimals() );
+
+			if ( 'true' === $fixed_price ) {
+				if ( '' === $fixed_price_amount_raw ) {
+					wp_delete_post( $bundle_post_id, true );
+					$this->redirect_with_error( __( 'Fast pris beløp mangler.', 'lp-bundle-builder' ) );
+				}
+
+				if ( '' === $fixed_price_amount ) {
+					wp_delete_post( $bundle_post_id, true );
+					$this->redirect_with_error( __( 'Fast pris beløp er ugyldig.', 'lp-bundle-builder' ) );
+				}
+
+				$fixed_price_amount_value = (float) $fixed_price_amount;
+				if ( $fixed_price_amount_value <= 0 ) {
+					wp_delete_post( $bundle_post_id, true );
+					$this->redirect_with_error( __( 'Fast pris beløp er ugyldig.', 'lp-bundle-builder' ) );
+				}
+
+				if ( $fixed_price_amount_value > $default_products_total ) {
+					wp_delete_post( $bundle_post_id, true );
+					$this->redirect_with_error( __( 'Fast pris beløp kan ikke være høyere enn ordinærpris.', 'lp-bundle-builder' ) );
+				}
+			} else {
+				$fixed_price_amount = '';
+			}
+
 			$props = array(
 				'individual_theme'         => 'false',
 				'theme'                    => 'grid_1',
@@ -1063,6 +1154,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$bundle->set_manage_stock( 'yes' === $manage_stock );
 			$bundle->set_stock_status( $stock_status );
 			$bundle->set_tax_status( $tax_status );
+			$bundle->set_regular_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
+			if ( 'true' === $fixed_price ) {
+				$bundle->set_sale_price( wc_format_decimal( $fixed_price_amount, wc_get_price_decimals() ) );
+				$bundle->set_price( wc_format_decimal( $fixed_price_amount, wc_get_price_decimals() ) );
+			} else {
+				$bundle->set_sale_price( '' );
+				$bundle->set_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
+			}
+			$bundle->set_sku( (string) $default_data['generated_sku'] );
 
 			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
@@ -1211,10 +1311,12 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 		}
 
 		private function build_default_products_data( $items ) {
-			$rows             = array();
-			$is_valid_config  = true;
-			$loop_add_to_cart = 'true';
-			$error_message    = '';
+			$rows                 = array();
+			$is_valid_config      = true;
+			$loop_add_to_cart     = 'true';
+			$error_message        = '';
+			$default_total        = 0.0;
+			$generated_sku_parts  = array();
 
 			foreach ( $items as $item ) {
 				$qty = isset( $item['quantity'] ) ? (int) $item['quantity'] : 0;
@@ -1236,6 +1338,19 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					'id'  => $pid,
 					'qty' => $qty,
 				);
+
+				$regular_price = $product->get_regular_price();
+				$active_price  = $product->get_price();
+				$unit_price    = 0.0;
+				if ( '' !== (string) $regular_price && is_numeric( $regular_price ) ) {
+					$unit_price = (float) $regular_price;
+				} elseif ( '' !== (string) $active_price && is_numeric( $active_price ) ) {
+					$unit_price = (float) $active_price;
+				}
+				$default_total += ( $unit_price * $qty );
+
+				$product_sku = trim( (string) $product->get_sku() );
+				$generated_sku_parts[] = ( '' !== $product_sku ) ? $product_sku : sprintf( 'ID-%d', $pid );
 
 				if ( 'true' === $loop_add_to_cart ) {
 					if ( 'true' === $item['optional'] && 'false' === $item['selected'] ) {
@@ -1259,15 +1374,19 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					'default_products_json' => '',
 					'rows'                  => array(),
 					'loop_add_to_cart'      => 'false',
+					'default_products_total'=> 0,
+					'generated_sku'         => '',
 				);
 			}
 
 			return array(
-				'is_valid'              => true,
-				'error'                 => '',
-				'default_products_json' => wp_json_encode( $rows ),
-				'rows'                  => $rows,
-				'loop_add_to_cart'      => $loop_add_to_cart,
+				'is_valid'               => true,
+				'error'                  => '',
+				'default_products_json'  => wp_json_encode( $rows ),
+				'rows'                   => $rows,
+				'loop_add_to_cart'       => $loop_add_to_cart,
+				'default_products_total' => (float) wc_format_decimal( $default_total, wc_get_price_decimals() ),
+				'generated_sku'          => implode( '+', $generated_sku_parts ),
 			);
 		}
 
