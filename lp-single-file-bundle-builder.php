@@ -665,12 +665,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				wp_send_json_success( array() );
 			}
 
-			$response = $this->remote_items_search( $type, $search );
-			if ( is_wp_error( $response ) ) {
-				wp_send_json_success( array() );
-			}
-
-			wp_send_json_success( $this->normalize_rest_items_response( $response ) );
+			wp_send_json_success( $this->get_items_with_fallback( $type, $search, array(), 'search' ) );
 		}
 
 		public function ajax_bundle_items_fetch() {
@@ -689,61 +684,75 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				wp_send_json_success( array() );
 			}
 
-			$response = $this->remote_items_fetch( $type, $items );
-			if ( is_wp_error( $response ) ) {
-				wp_send_json_success( array() );
-			}
-
-			wp_send_json_success( $this->normalize_rest_items_response( $response ) );
+			wp_send_json_success( $this->get_items_with_fallback( $type, '', $items, 'fetch' ) );
 		}
 
-		private function remote_items_search( $type, $search ) {
-			$url = add_query_arg(
-				array(
-					'search' => $search,
-					'type'   => $type,
-				),
-				rest_url( ltrim( self::ITEMS_REST_ROUTE, '/' ) )
-			);
-			$response = wp_remote_get(
-				$url,
-				array(
-					'timeout' => 15,
-				)
-			);
-
-			if ( is_wp_error( $response ) ) {
-				return $response;
+		private function get_items_with_fallback( $type, $search, $items, $mode ) {
+			$rest_items = $this->rest_items_request( $type, $search, $items, $mode );
+			if ( ! empty( $rest_items ) ) {
+				return $rest_items;
 			}
 
-			$body = wp_remote_retrieve_body( $response );
-			$data = json_decode( $body, true );
-			return is_array( $data ) ? $data : array();
+			if ( in_array( $type, array( 'products', 'default_product' ), true ) ) {
+				return $this->fallback_product_items( $search, $items, $mode );
+			}
+
+			if ( in_array( $type, array( 'categories', 'tags' ), true ) ) {
+				$taxonomy = ( 'categories' === $type ) ? 'product_cat' : 'product_tag';
+				return $this->fallback_term_items( $taxonomy, $search, $items, $mode );
+			}
+
+			return array();
 		}
 
-		private function remote_items_fetch( $type, $items ) {
-			$url = rest_url( ltrim( self::ITEMS_REST_ROUTE, '/' ) );
-			$response = wp_remote_post(
-				$url,
-				array(
-					'timeout' => 15,
-					'headers' => array( 'Content-Type' => 'application/json' ),
-					'body'    => wp_json_encode(
-						array(
-							'type'  => $type,
-							'items' => $items,
-						)
-					),
-				)
-			);
-
-			if ( is_wp_error( $response ) ) {
-				return $response;
+		private function rest_items_request( $type, $search, $items, $mode ) {
+			$route = $this->get_internal_items_rest_route();
+			if ( '' === $route ) {
+				return array();
 			}
 
-			$body = wp_remote_retrieve_body( $response );
-			$data = json_decode( $body, true );
-			return is_array( $data ) ? $data : array();
+			if ( 'fetch' === $mode ) {
+				$request = new \WP_REST_Request( 'POST', $route );
+				$request->set_body_params(
+					array(
+						'type'  => $type,
+						'items' => $items,
+					)
+				);
+			} else {
+				$request = new \WP_REST_Request( 'GET', $route );
+				$request->set_query_params(
+					array(
+						'type'   => $type,
+						'search' => $search,
+					)
+				);
+			}
+
+			$response = rest_do_request( $request );
+			if ( ! $response instanceof \WP_REST_Response ) {
+				return array();
+			}
+
+			$status = (int) $response->get_status();
+			if ( $status < 200 || $status >= 300 ) {
+				return array();
+			}
+
+			$data = $response->get_data();
+			if ( ! is_array( $data ) ) {
+				return array();
+			}
+
+			$items_data = $this->normalize_rest_items_response( $data );
+			return is_array( $items_data ) ? array_values( $items_data ) : array();
+		}
+
+		private function get_internal_items_rest_route() {
+			$route = (string) self::ITEMS_REST_ROUTE;
+			$route = preg_replace( '#^/wp-json#', '', $route );
+			$route = '/' . ltrim( (string) $route, '/' );
+			return ( '/' === $route ) ? '' : $route;
 		}
 
 		private function normalize_rest_items_response( $response ) {
@@ -754,6 +763,112 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				return $response['data'];
 			}
 			return is_array( $response ) ? array_values( $response ) : array();
+		}
+
+		private function fallback_product_items( $search, $items, $mode ) {
+			$product_ids = array();
+
+			if ( 'fetch' === $mode ) {
+				$product_ids = $this->sanitize_unique_positive_int_array( $items );
+			} else {
+				$search_term = trim( (string) $search );
+				if ( strlen( $search_term ) < 2 ) {
+					return array();
+				}
+
+				$query = new \WP_Query(
+					array(
+						'post_type'      => array( 'product', 'product_variation' ),
+						'post_status'    => array( 'publish', 'private' ),
+						's'              => $search_term,
+						'posts_per_page' => 30,
+						'fields'         => 'ids',
+						'orderby'        => 'date',
+						'order'          => 'DESC',
+						'no_found_rows'  => true,
+					)
+				);
+				if ( ! empty( $query->posts ) && is_array( $query->posts ) ) {
+					$product_ids = array_map( 'absint', $query->posts );
+				}
+			}
+
+			if ( empty( $product_ids ) ) {
+				return array();
+			}
+
+			$results = array();
+			foreach ( $product_ids as $product_id ) {
+				$product = wc_get_product( $product_id );
+				if ( ! $this->is_searchable_bundle_product( $product ) ) {
+					continue;
+				}
+
+				$name = $product->get_name();
+				$sku  = (string) $product->get_sku();
+				$label = '' !== $sku ? sprintf( '%1$s (%2$s)', $sku, $name ) : sprintf( '(%s)', $name );
+
+				$results[] = array(
+					'value'      => (int) $product->get_id(),
+					'label'      => $label,
+					'isDisabled' => false,
+				);
+			}
+
+			return $results;
+		}
+
+		private function fallback_term_items( $taxonomy, $search, $items, $mode ) {
+			$args = array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'number'     => 30,
+			);
+
+			if ( 'fetch' === $mode ) {
+				$args['include'] = $this->sanitize_unique_positive_int_array( $items );
+				if ( empty( $args['include'] ) ) {
+					return array();
+				}
+			} else {
+				$search_term = trim( (string) $search );
+				if ( strlen( $search_term ) < 2 ) {
+					return array();
+				}
+				$args['name__like'] = $search_term;
+			}
+
+			$terms = get_terms( $args );
+			if ( is_wp_error( $terms ) || ! is_array( $terms ) || empty( $terms ) ) {
+				return array();
+			}
+
+			$results = array();
+			foreach ( $terms as $term ) {
+				if ( ! $term instanceof \WP_Term ) {
+					continue;
+				}
+				$results[] = array(
+					'value' => (int) $term->term_id,
+					'label' => (string) $term->name,
+					'slug'  => (string) $term->slug,
+					'name'  => (string) $term->name,
+				);
+			}
+
+			return $results;
+		}
+
+		private function is_searchable_bundle_product( $product ) {
+			if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+				return false;
+			}
+
+			if ( $product->is_type( 'simple' ) || $product->is_type( 'variation' ) ) {
+				return true;
+			}
+
+			return false;
 		}
 
 		private function normalize_item_type( $type ) {
@@ -847,6 +962,14 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			$default_data = $this->build_default_products_data( $items );
+			if ( empty( $default_data['is_valid'] ) || '' === $default_data['default_products_json'] ) {
+				wp_delete_post( $bundle_post_id, true );
+				$this->redirect_with_error(
+					! empty( $default_data['error'] )
+						? $default_data['error']
+						: __( 'Bundle-konfigurasjonen har ugyldige standardprodukter.', 'lp-bundle-builder' )
+				);
+			}
 
 			$props = array(
 				'individual_theme'         => 'false',
@@ -918,7 +1041,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$item = $this->bundle_item_defaults();
 
 			$product_id = isset( $part['default_product'] ) ? absint( $part['default_product'] ) : 0;
-			if ( $product_id > 0 && wc_get_product( $product_id ) ) {
+			$product = $product_id > 0 ? wc_get_product( $product_id ) : false;
+			if ( $product_id > 0 && $this->is_valid_default_bundle_product( $product ) ) {
 				$item['product'] = $product_id;
 			}
 
@@ -1027,18 +1151,21 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$rows             = array();
 			$is_valid_config  = true;
 			$loop_add_to_cart = 'true';
+			$error_message    = '';
 
 			foreach ( $items as $item ) {
 				$qty = isset( $item['quantity'] ) ? (int) $item['quantity'] : 0;
 				$pid = isset( $item['product'] ) ? absint( $item['product'] ) : 0;
 				if ( $qty <= 0 || $pid <= 0 ) {
 					$is_valid_config = false;
+					$error_message   = __( 'Ugyldig quantity eller standardprodukt i minst én del.', 'lp-bundle-builder' );
 					break;
 				}
 
 				$product = wc_get_product( $pid );
-				if ( ! $product || ! $product->is_purchasable() ) {
+				if ( ! $this->is_valid_default_bundle_product( $product ) ) {
 					$is_valid_config = false;
+					$error_message   = __( 'Et eller flere standardprodukter er ugyldige eller ikke kjøpbare.', 'lp-bundle-builder' );
 					break;
 				}
 
@@ -1064,6 +1191,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			if ( ! $is_valid_config ) {
 				return array(
+					'is_valid'              => false,
+					'error'                 => $error_message,
 					'default_products_json' => '',
 					'rows'                  => array(),
 					'loop_add_to_cart'      => 'false',
@@ -1071,10 +1200,35 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			return array(
+				'is_valid'              => true,
+				'error'                 => '',
 				'default_products_json' => wp_json_encode( $rows ),
 				'rows'                  => $rows,
 				'loop_add_to_cart'      => $loop_add_to_cart,
 			);
+		}
+
+		private function is_valid_default_bundle_product( $product ) {
+			if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+				return false;
+			}
+
+			if ( ! $product->exists() || ! $product->is_purchasable() ) {
+				return false;
+			}
+
+			if ( $product->is_type( 'variable' ) || $product->is_type( 'grouped' ) || $product->is_type( 'external' ) || $product->is_type( self::PRODUCT_TYPE ) ) {
+				return false;
+			}
+
+			if ( $product->is_type( 'variation' ) ) {
+				$parent_id = (int) $product->get_parent_id();
+				if ( $parent_id <= 0 || ! wc_get_product( $parent_id ) ) {
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		private function redirect_with_error( $message ) {
