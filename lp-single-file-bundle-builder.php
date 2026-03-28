@@ -13,14 +13,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 	final class LP_Single_File_Bundle_Builder {
 		const MENU_SLUG          = 'lp-easy-bundle-builder';
+		const SETTINGS_MENU_SLUG = 'lp-easy-bundle-builder-settings';
 		const NONCE_ACTION       = 'lp_easy_bundle_builder_create';
+		const SETTINGS_NONCE_ACTION = 'lp_easy_bundle_builder_save_defaults';
 		const AJAX_NONCE_ACTION  = 'lp_easy_bundle_builder_items';
 		const PRODUCT_TYPE       = 'easy_product_bundle';
 		const ITEMS_REST_ROUTE   = '/wp-json/asnp-easy-product-bundles/v1/items';
+		const DEFAULTS_OPTION    = 'lp_easy_bundle_builder_defaults';
 
 		public function __construct() {
 			add_action( 'admin_menu', array( $this, 'register_menu' ), 99 );
 			add_action( 'admin_post_lp_create_easy_bundle', array( $this, 'handle_create_bundle' ) );
+			add_action( 'admin_post_lp_save_easy_bundle_builder_defaults', array( $this, 'handle_save_defaults' ) );
 			add_action( 'wp_ajax_lp_bundle_items_search', array( $this, 'ajax_bundle_items_search' ) );
 			add_action( 'wp_ajax_lp_bundle_items_fetch', array( $this, 'ajax_bundle_items_fetch' ) );
 			add_action( 'admin_notices', array( $this, 'admin_notices' ) );
@@ -35,6 +39,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				self::MENU_SLUG,
 				array( $this, 'render_page' )
 			);
+
+			add_submenu_page(
+				'edit.php?post_type=product',
+				__( 'Bundle Builder Settings', 'lp-bundle-builder' ),
+				__( 'Bundle Builder Settings', 'lp-bundle-builder' ),
+				'manage_woocommerce',
+				self::SETTINGS_MENU_SLUG,
+				array( $this, 'render_settings_page' )
+			);
 		}
 
 		public function admin_notices() {
@@ -44,7 +57,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			if ( ! $this->is_dependency_ready() ) {
 				$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-				if ( $screen && in_array( $screen->id, array( 'product_page_' . self::MENU_SLUG, 'edit-product', 'product' ), true ) ) {
+				if ( $screen && in_array( $screen->id, array( 'product_page_' . self::MENU_SLUG, 'product_page_' . self::SETTINGS_MENU_SLUG, 'edit-product', 'product' ), true ) ) {
 					echo '<div class="notice notice-error"><p>' . esc_html__( 'Bundle Builder krever at WooCommerce og Easy Product Bundles for WooCommerce er aktive.', 'lp-bundle-builder' ) . '</p></div>';
 				}
 			}
@@ -54,6 +67,167 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return class_exists( 'WooCommerce' )
 				&& class_exists( '\\AsanaPlugins\\WooCommerce\\ProductBundles\\ProductBundle' )
 				&& class_exists( '\\AsanaPlugins\\WooCommerce\\ProductBundles\\Models\\SimpleBundleItemsModel' );
+		}
+
+		private function defaults_fallback() {
+			return array(
+				'product_status'       => 'draft',
+				'fixed_price'          => 'false',
+				'bundle_button_label'  => 'Configure bundle',
+				'sync_stock_quantity'  => 'false',
+				'manage_stock'         => 'no',
+				'stock_status'         => 'instock',
+				'tax_status'           => 'taxable',
+			);
+		}
+
+		private function normalize_true_false_string( $value ) {
+			return ( 'true' === strtolower( (string) $value ) || '1' === (string) $value || true === $value ) ? 'true' : 'false';
+		}
+
+		private function sanitize_defaults_option( $raw_defaults ) {
+			$defaults     = $this->defaults_fallback();
+			$raw_defaults = is_array( $raw_defaults ) ? $raw_defaults : array();
+
+			$product_status = isset( $raw_defaults['product_status'] ) ? sanitize_key( $raw_defaults['product_status'] ) : $defaults['product_status'];
+			$product_status = in_array( $product_status, array( 'draft', 'publish' ), true ) ? $product_status : $defaults['product_status'];
+
+			$fixed_price = isset( $raw_defaults['fixed_price'] ) ? $this->normalize_true_false_string( $raw_defaults['fixed_price'] ) : $defaults['fixed_price'];
+			$sync_stock_quantity = isset( $raw_defaults['sync_stock_quantity'] ) ? $this->normalize_true_false_string( $raw_defaults['sync_stock_quantity'] ) : $defaults['sync_stock_quantity'];
+
+			$bundle_button_label = isset( $raw_defaults['bundle_button_label'] ) ? sanitize_text_field( $raw_defaults['bundle_button_label'] ) : $defaults['bundle_button_label'];
+			if ( '' === $bundle_button_label ) {
+				$bundle_button_label = $defaults['bundle_button_label'];
+			}
+
+			$manage_stock = isset( $raw_defaults['manage_stock'] ) ? sanitize_key( $raw_defaults['manage_stock'] ) : $defaults['manage_stock'];
+			$manage_stock = in_array( $manage_stock, array( 'yes', 'no' ), true ) ? $manage_stock : $defaults['manage_stock'];
+
+			$stock_status = isset( $raw_defaults['stock_status'] ) ? sanitize_key( $raw_defaults['stock_status'] ) : $defaults['stock_status'];
+			$stock_status = in_array( $stock_status, array( 'instock', 'outofstock', 'onbackorder' ), true ) ? $stock_status : $defaults['stock_status'];
+
+			$tax_status = isset( $raw_defaults['tax_status'] ) ? sanitize_key( $raw_defaults['tax_status'] ) : $defaults['tax_status'];
+			$tax_status = in_array( $tax_status, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status : $defaults['tax_status'];
+
+			return array(
+				'product_status'      => $product_status,
+				'fixed_price'         => $fixed_price,
+				'bundle_button_label' => $bundle_button_label,
+				'sync_stock_quantity' => $sync_stock_quantity,
+				'manage_stock'        => $manage_stock,
+				'stock_status'        => $stock_status,
+				'tax_status'          => $tax_status,
+			);
+		}
+
+		private function get_builder_defaults() {
+			$defaults = get_option( self::DEFAULTS_OPTION, array() );
+			return $this->sanitize_defaults_option( $defaults );
+		}
+
+		public function handle_save_defaults() {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_die( esc_html__( 'Du har ikke tilgang til å lagre innstillinger.', 'lp-bundle-builder' ) );
+			}
+
+			check_admin_referer( self::SETTINGS_NONCE_ACTION );
+
+			$raw_defaults = array(
+				'product_status'      => isset( $_POST['product_status'] ) ? wp_unslash( $_POST['product_status'] ) : '',
+				'fixed_price'         => isset( $_POST['fixed_price'] ) ? 'true' : 'false',
+				'bundle_button_label' => isset( $_POST['bundle_button_label'] ) ? wp_unslash( $_POST['bundle_button_label'] ) : '',
+				'sync_stock_quantity' => isset( $_POST['sync_stock_quantity'] ) ? 'true' : 'false',
+				'manage_stock'        => isset( $_POST['manage_stock'] ) ? wp_unslash( $_POST['manage_stock'] ) : '',
+				'stock_status'        => isset( $_POST['stock_status'] ) ? wp_unslash( $_POST['stock_status'] ) : '',
+				'tax_status'          => isset( $_POST['tax_status'] ) ? wp_unslash( $_POST['tax_status'] ) : '',
+			);
+
+			update_option( self::DEFAULTS_OPTION, $this->sanitize_defaults_option( $raw_defaults ) );
+
+			$redirect_url = add_query_arg(
+				array(
+					'post_type'         => 'product',
+					'page'              => self::SETTINGS_MENU_SLUG,
+					'lp_settings_saved' => 1,
+				),
+				admin_url( 'edit.php' )
+			);
+
+			wp_safe_redirect( $redirect_url );
+			exit;
+		}
+
+		public function render_settings_page() {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_die( esc_html__( 'Du har ikke tilgang til denne siden.', 'lp-bundle-builder' ) );
+			}
+
+			$defaults = $this->get_builder_defaults();
+			?>
+			<div class="wrap">
+				<h1><?php echo esc_html__( 'Bundle Builder Settings', 'lp-bundle-builder' ); ?></h1>
+				<p><?php echo esc_html__( 'Disse standardverdiene brukes når du åpner Bundle Builder. Du kan fortsatt overstyre dem per bundle.', 'lp-bundle-builder' ); ?></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="lp_save_easy_bundle_builder_defaults" />
+					<?php wp_nonce_field( self::SETTINGS_NONCE_ACTION ); ?>
+					<table class="form-table" role="presentation">
+						<tbody>
+							<tr>
+								<th scope="row"><label for="lp_default_product_status"><?php echo esc_html__( 'Default product status', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_product_status" name="product_status">
+										<option value="draft" <?php selected( $defaults['product_status'], 'draft' ); ?>><?php echo esc_html__( 'Draft', 'lp-bundle-builder' ); ?></option>
+										<option value="publish" <?php selected( $defaults['product_status'], 'publish' ); ?>><?php echo esc_html__( 'Publish', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_fixed_price"><?php echo esc_html__( 'Fixed price default', 'lp-bundle-builder' ); ?></label></th>
+								<td><label><input type="checkbox" id="lp_default_fixed_price" name="fixed_price" value="1" <?php checked( $defaults['fixed_price'], 'true' ); ?> /> <?php echo esc_html__( 'Enable fixed price by default', 'lp-bundle-builder' ); ?></label></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_button_label"><?php echo esc_html__( 'Bundle button label default', 'lp-bundle-builder' ); ?></label></th>
+								<td><input type="text" class="regular-text" id="lp_default_bundle_button_label" name="bundle_button_label" value="<?php echo esc_attr( $defaults['bundle_button_label'] ); ?>" maxlength="120" /></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_sync_stock_quantity"><?php echo esc_html__( 'Sync stock quantity default', 'lp-bundle-builder' ); ?></label></th>
+								<td><label><input type="checkbox" id="lp_default_sync_stock_quantity" name="sync_stock_quantity" value="1" <?php checked( $defaults['sync_stock_quantity'], 'true' ); ?> /> <?php echo esc_html__( 'Enable stock quantity sync by default', 'lp-bundle-builder' ); ?></label></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_manage_stock"><?php echo esc_html__( 'WooCommerce manage stock default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_manage_stock" name="manage_stock">
+										<option value="no" <?php selected( $defaults['manage_stock'], 'no' ); ?>><?php echo esc_html__( 'No', 'lp-bundle-builder' ); ?></option>
+										<option value="yes" <?php selected( $defaults['manage_stock'], 'yes' ); ?>><?php echo esc_html__( 'Yes', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_stock_status"><?php echo esc_html__( 'WooCommerce stock status default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_stock_status" name="stock_status">
+										<option value="instock" <?php selected( $defaults['stock_status'], 'instock' ); ?>><?php echo esc_html__( 'In stock', 'lp-bundle-builder' ); ?></option>
+										<option value="outofstock" <?php selected( $defaults['stock_status'], 'outofstock' ); ?>><?php echo esc_html__( 'Out of stock', 'lp-bundle-builder' ); ?></option>
+										<option value="onbackorder" <?php selected( $defaults['stock_status'], 'onbackorder' ); ?>><?php echo esc_html__( 'On backorder', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_tax_status"><?php echo esc_html__( 'WooCommerce tax status default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_tax_status" name="tax_status">
+										<option value="taxable" <?php selected( $defaults['tax_status'], 'taxable' ); ?>><?php echo esc_html__( 'Taxable', 'lp-bundle-builder' ); ?></option>
+										<option value="shipping" <?php selected( $defaults['tax_status'], 'shipping' ); ?>><?php echo esc_html__( 'Shipping only', 'lp-bundle-builder' ); ?></option>
+										<option value="none" <?php selected( $defaults['tax_status'], 'none' ); ?>><?php echo esc_html__( 'None', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+					<?php submit_button( __( 'Save defaults', 'lp-bundle-builder' ) ); ?>
+				</form>
+			</div>
+			<?php
 		}
 
 		public function render_page() {
@@ -68,6 +242,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			$created_id = isset( $_GET['lp_bundle_id'] ) ? absint( $_GET['lp_bundle_id'] ) : 0;
+			$defaults   = $this->get_builder_defaults();
 			?>
 			<div class="wrap lp-bundle-builder-wrap">
 				<h1><?php echo esc_html__( 'Bundle Builder', 'lp-bundle-builder' ); ?></h1>
@@ -97,8 +272,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_bundle_status"><?php echo esc_html__( 'Produktstatus', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<select id="lp_bundle_status" name="bundle_status">
-										<option value="draft"><?php echo esc_html__( 'Kladd', 'lp-bundle-builder' ); ?></option>
-										<option value="publish"><?php echo esc_html__( 'Publisert', 'lp-bundle-builder' ); ?></option>
+										<option value="draft" <?php selected( $defaults['product_status'], 'draft' ); ?>><?php echo esc_html__( 'Kladd', 'lp-bundle-builder' ); ?></option>
+										<option value="publish" <?php selected( $defaults['product_status'], 'publish' ); ?>><?php echo esc_html__( 'Publisert', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -106,7 +281,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_fixed_price"><?php echo esc_html__( 'Fast pris', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<label for="lp_fixed_price">
-										<input type="checkbox" id="lp_fixed_price" name="fixed_price" value="1" />
+										<input type="checkbox" id="lp_fixed_price" name="fixed_price" value="1" <?php checked( $defaults['fixed_price'], 'true' ); ?> />
 										<?php echo esc_html__( 'Aktiver fast pris for bundlen', 'lp-bundle-builder' ); ?>
 									</label>
 								</td>
@@ -114,7 +289,45 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							<tr>
 								<th scope="row"><label for="lp_bundle_button_label"><?php echo esc_html__( 'Bundle-knappetekst (shop)', 'lp-bundle-builder' ); ?></label></th>
 								<td>
-									<input type="text" class="regular-text" id="lp_bundle_button_label" name="bundle_button_label" value="<?php echo esc_attr__( 'Configure bundle', 'lp-bundle-builder' ); ?>" maxlength="120" />
+									<input type="text" class="regular-text" id="lp_bundle_button_label" name="bundle_button_label" value="<?php echo esc_attr( $defaults['bundle_button_label'] ); ?>" maxlength="120" />
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_sync_stock_quantity"><?php echo esc_html__( 'Sync stock quantity', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<label for="lp_sync_stock_quantity">
+										<input type="checkbox" id="lp_sync_stock_quantity" name="sync_stock_quantity" value="1" <?php checked( $defaults['sync_stock_quantity'], 'true' ); ?> />
+										<?php echo esc_html__( 'Synkroniser lagerbeholdning fra bundle-innhold', 'lp-bundle-builder' ); ?>
+									</label>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_manage_stock"><?php echo esc_html__( 'WooCommerce manage stock', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_manage_stock" name="manage_stock">
+										<option value="no" <?php selected( $defaults['manage_stock'], 'no' ); ?>><?php echo esc_html__( 'No', 'lp-bundle-builder' ); ?></option>
+										<option value="yes" <?php selected( $defaults['manage_stock'], 'yes' ); ?>><?php echo esc_html__( 'Yes', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_stock_status"><?php echo esc_html__( 'WooCommerce stock status', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_stock_status" name="stock_status">
+										<option value="instock" <?php selected( $defaults['stock_status'], 'instock' ); ?>><?php echo esc_html__( 'In stock', 'lp-bundle-builder' ); ?></option>
+										<option value="outofstock" <?php selected( $defaults['stock_status'], 'outofstock' ); ?>><?php echo esc_html__( 'Out of stock', 'lp-bundle-builder' ); ?></option>
+										<option value="onbackorder" <?php selected( $defaults['stock_status'], 'onbackorder' ); ?>><?php echo esc_html__( 'On backorder', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_tax_status"><?php echo esc_html__( 'WooCommerce tax status', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_tax_status" name="tax_status">
+										<option value="taxable" <?php selected( $defaults['tax_status'], 'taxable' ); ?>><?php echo esc_html__( 'Taxable', 'lp-bundle-builder' ); ?></option>
+										<option value="shipping" <?php selected( $defaults['tax_status'], 'shipping' ); ?>><?php echo esc_html__( 'Shipping only', 'lp-bundle-builder' ); ?></option>
+										<option value="none" <?php selected( $defaults['tax_status'], 'none' ); ?>><?php echo esc_html__( 'None', 'lp-bundle-builder' ); ?></option>
+									</select>
 								</td>
 							</tr>
 						</tbody>
@@ -566,14 +779,28 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( __( 'WooCommerce eller Easy Product Bundles er ikke aktiv.', 'lp-bundle-builder' ) );
 			}
 
-			$title       = isset( $_POST['bundle_title'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_title'] ) ) : '';
-			$status_raw  = isset( $_POST['bundle_status'] ) ? sanitize_key( wp_unslash( $_POST['bundle_status'] ) ) : 'draft';
-			$status      = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : 'draft';
+			$defaults = $this->get_builder_defaults();
+
+			$title      = isset( $_POST['bundle_title'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_title'] ) ) : '';
+			$status_raw = isset( $_POST['bundle_status'] ) ? sanitize_key( wp_unslash( $_POST['bundle_status'] ) ) : $defaults['product_status'];
+			$status     = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : $defaults['product_status'];
+
 			$fixed_price = ! empty( $_POST['fixed_price'] ) ? 'true' : 'false';
-			$bundle_button_label = isset( $_POST['bundle_button_label'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_button_label'] ) ) : '';
+			$sync_stock_quantity = ! empty( $_POST['sync_stock_quantity'] ) ? 'true' : 'false';
+
+			$bundle_button_label = isset( $_POST['bundle_button_label'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_button_label'] ) ) : $defaults['bundle_button_label'];
 			if ( '' === $bundle_button_label ) {
-				$bundle_button_label = 'Configure bundle';
+				$bundle_button_label = $defaults['bundle_button_label'];
 			}
+
+			$manage_stock_raw = isset( $_POST['manage_stock'] ) ? sanitize_key( wp_unslash( $_POST['manage_stock'] ) ) : $defaults['manage_stock'];
+			$manage_stock     = in_array( $manage_stock_raw, array( 'yes', 'no' ), true ) ? $manage_stock_raw : $defaults['manage_stock'];
+
+			$stock_status_raw = isset( $_POST['stock_status'] ) ? sanitize_key( wp_unslash( $_POST['stock_status'] ) ) : $defaults['stock_status'];
+			$stock_status     = in_array( $stock_status_raw, array( 'instock', 'outofstock', 'onbackorder' ), true ) ? $stock_status_raw : $defaults['stock_status'];
+
+			$tax_status_raw = isset( $_POST['tax_status'] ) ? sanitize_key( wp_unslash( $_POST['tax_status'] ) ) : $defaults['tax_status'];
+			$tax_status     = in_array( $tax_status_raw, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status_raw : $defaults['tax_status'];
 
 			if ( '' === $title ) {
 				$title = sprintf( __( 'Nytt bundle %s', 'lp-bundle-builder' ), current_time( 'Y-m-d H:i' ) );
@@ -637,7 +864,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'items'                    => $items,
 				'default_products'         => $default_data['default_products_json'],
 				'loop_add_to_cart'         => $default_data['loop_add_to_cart'],
-				'sync_stock_quantity'      => 'false',
+				'sync_stock_quantity'      => $sync_stock_quantity,
 				'bundle_button_label'      => $bundle_button_label,
 			);
 
@@ -646,6 +873,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				wp_delete_post( $bundle_post_id, true );
 				$this->redirect_with_error( $errors->get_error_message() );
 			}
+
+			$bundle->set_manage_stock( 'yes' === $manage_stock );
+			$bundle->set_stock_status( $stock_status );
+			$bundle->set_tax_status( $tax_status );
 
 			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
@@ -871,7 +1102,17 @@ add_action(
 			return;
 		}
 
-		if ( empty( $_GET['page'] ) || LP_Single_File_Bundle_Builder::MENU_SLUG !== sanitize_key( wp_unslash( $_GET['page'] ) ) || empty( $_GET['lp_bundle_error'] ) ) {
+		if ( empty( $_GET['page'] ) ) {
+			return;
+		}
+
+		$page = sanitize_key( wp_unslash( $_GET['page'] ) );
+
+		if ( LP_Single_File_Bundle_Builder::SETTINGS_MENU_SLUG === $page && ! empty( $_GET['lp_settings_saved'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Bundle Builder defaults saved.', 'lp-bundle-builder' ) . '</p></div>';
+		}
+
+		if ( LP_Single_File_Bundle_Builder::MENU_SLUG !== $page || empty( $_GET['lp_bundle_error'] ) ) {
 			return;
 		}
 
