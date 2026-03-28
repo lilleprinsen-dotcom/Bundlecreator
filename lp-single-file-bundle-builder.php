@@ -564,8 +564,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			wp_set_object_terms( $bundle_post_id, self::PRODUCT_TYPE, 'product_type' );
 
-			$bundle = new \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle( $bundle_post_id );
-			if ( ! method_exists( $bundle, 'set_props' ) || ! method_exists( $bundle, 'set_items' ) ) {
+			$bundle = wc_get_product( $bundle_post_id );
+			if ( ! $bundle instanceof \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle || ! method_exists( $bundle, 'set_props' ) ) {
 				wp_delete_post( $bundle_post_id, true );
 				$this->redirect_with_error( __( 'Bundle-klassen kunne ikke lastes riktig.', 'lp-bundle-builder' ) );
 			}
@@ -621,7 +621,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( $errors->get_error_message() );
 			}
 
-			$model = new \AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel();
+			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
+				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
+			);
 			$model->delete_bundle( $bundle_post_id );
 			foreach ( $default_products as $default_product ) {
 				$model->add(
@@ -635,7 +637,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			do_action( 'asnp_wepb_admin_process_product_object', $bundle );
 
-			\AsanaPlugins\WooCommerce\ProductBundles\ProductBundle::sync( $bundle, false );
+			$bundle = \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle::sync( $bundle, false );
 			$bundle->save();
 
 			clean_post_cache( $bundle_post_id );
