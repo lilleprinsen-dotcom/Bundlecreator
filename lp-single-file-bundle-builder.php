@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Lilleprinsen - Bundle Builder for Easy Product Bundles
- * Description: En enkel side under Produkter der du kan velge flere produkter og opprette et nytt Easy Product Bundle-produkt. Laget for kompatibilitet med Easy Product Bundles for WooCommerce.
- * Version: 1.0.0
+ * Description: En enkel side under Produkter for å opprette Easy Product Bundle med flere deler.
+ * Version: 1.1.0
  * Author: OpenAI
  */
 
@@ -12,15 +12,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 	final class LP_Single_File_Bundle_Builder {
-		const MENU_SLUG   = 'lp-easy-bundle-builder';
-		const NONCE_ACTION = 'lp_easy_bundle_builder_create';
-		const AJAX_NONCE_ACTION = 'lp_easy_bundle_builder_search';
-		const PRODUCT_TYPE = 'easy_product_bundle';
+		const MENU_SLUG          = 'lp-easy-bundle-builder';
+		const NONCE_ACTION       = 'lp_easy_bundle_builder_create';
+		const AJAX_NONCE_ACTION  = 'lp_easy_bundle_builder_items';
+		const PRODUCT_TYPE       = 'easy_product_bundle';
+		const ITEMS_REST_ROUTE   = '/wp-json/asnp-easy-product-bundles/v1/items';
 
 		public function __construct() {
 			add_action( 'admin_menu', array( $this, 'register_menu' ), 99 );
 			add_action( 'admin_post_lp_create_easy_bundle', array( $this, 'handle_create_bundle' ) );
-			add_action( 'wp_ajax_lp_search_bundle_products', array( $this, 'ajax_search_products' ) );
+			add_action( 'wp_ajax_lp_bundle_items_search', array( $this, 'ajax_bundle_items_search' ) );
+			add_action( 'wp_ajax_lp_bundle_items_fetch', array( $this, 'ajax_bundle_items_fetch' ) );
 			add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		}
 
@@ -69,8 +71,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			?>
 			<div class="wrap lp-bundle-builder-wrap">
 				<h1><?php echo esc_html__( 'Bundle Builder', 'lp-bundle-builder' ); ?></h1>
-				<p><?php echo esc_html__( 'Velg produkter, så opprettes et nytt bundle-produkt der hvert valgt produkt blir én separat bundle-del.', 'lp-bundle-builder' ); ?></p>
-				<p><strong><?php echo esc_html__( 'Merk:', 'lp-bundle-builder' ); ?></strong> <?php echo esc_html__( 'Søket viser bare konkrete, kjøpbare produkter/variasjoner for best mulig kompatibilitet med Easy Product Bundles.', 'lp-bundle-builder' ); ?></p>
+				<p><?php echo esc_html__( 'Bygg bundle-deler: hver del blir ett Easy Product Bundles-item.', 'lp-bundle-builder' ); ?></p>
 
 				<?php if ( ! empty( $_GET['lp_bundle_created'] ) && $created_id > 0 ) : ?>
 					<div class="notice notice-success inline"><p>
@@ -82,6 +83,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="lp-bundle-builder-form">
 					<input type="hidden" name="action" value="lp_create_easy_bundle" />
 					<?php wp_nonce_field( self::NONCE_ACTION ); ?>
+					<input type="hidden" id="lp_parts_json" name="parts_json" value="" />
 
 					<table class="form-table" role="presentation">
 						<tbody>
@@ -89,7 +91,6 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_bundle_title"><?php echo esc_html__( 'Bundle-navn', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<input type="text" class="regular-text" id="lp_bundle_title" name="bundle_title" required placeholder="<?php echo esc_attr__( 'F.eks. Gavesett vår', 'lp-bundle-builder' ); ?>" />
-									<p class="description"><?php echo esc_html__( 'Dette blir tittelen på det nye bundle-produktet.', 'lp-bundle-builder' ); ?></p>
 								</td>
 							</tr>
 							<tr>
@@ -108,402 +109,450 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										<input type="checkbox" id="lp_fixed_price" name="fixed_price" value="1" />
 										<?php echo esc_html__( 'Aktiver fast pris for bundlen', 'lp-bundle-builder' ); ?>
 									</label>
-									<p class="description"><?php echo esc_html__( 'Når aktivert settes fixed_price til true.', 'lp-bundle-builder' ); ?></p>
 								</td>
 							</tr>
 							<tr>
 								<th scope="row"><label for="lp_bundle_button_label"><?php echo esc_html__( 'Bundle-knappetekst (shop)', 'lp-bundle-builder' ); ?></label></th>
 								<td>
-									<input
-										type="text"
-										class="regular-text"
-										id="lp_bundle_button_label"
-										name="bundle_button_label"
-										value="<?php echo esc_attr__( 'Configure bundle', 'lp-bundle-builder' ); ?>"
-										maxlength="120"
-									/>
-									<p class="description"><?php echo esc_html__( 'Teksten som vises på bundle-knappen i shop/listing.', 'lp-bundle-builder' ); ?></p>
-								</td>
-							</tr>
-							<tr>
-								<th scope="row"><label for="lp_product_search"><?php echo esc_html__( 'Legg til produkter', 'lp-bundle-builder' ); ?></label></th>
-								<td>
-									<input type="search" class="regular-text" id="lp_product_search" placeholder="<?php echo esc_attr__( 'Søk etter produktnavn eller SKU', 'lp-bundle-builder' ); ?>" autocomplete="off" />
-									<button type="button" class="button" id="lp_clear_search"><?php echo esc_html__( 'Tøm', 'lp-bundle-builder' ); ?></button>
-									<div id="lp_product_search_results" class="lp-search-results"></div>
-									<p class="description"><?php echo esc_html__( 'Klikk på et søkeresultat for å legge det til i bundlen.', 'lp-bundle-builder' ); ?></p>
-								</td>
-							</tr>
-							<tr>
-								<th scope="row"><?php echo esc_html__( 'Valgte produkter', 'lp-bundle-builder' ); ?></th>
-								<td>
-									<ul id="lp_selected_products" class="lp-selected-products"></ul>
-									<div id="lp_selected_inputs"></div>
-									<p class="description"><?php echo esc_html__( 'Rekkefølgen du legger dem til i blir rekkefølgen i bundlen. Hver vare får antall 1 og blir én egen bundle-del.', 'lp-bundle-builder' ); ?></p>
+									<input type="text" class="regular-text" id="lp_bundle_button_label" name="bundle_button_label" value="<?php echo esc_attr__( 'Configure bundle', 'lp-bundle-builder' ); ?>" maxlength="120" />
 								</td>
 							</tr>
 						</tbody>
 					</table>
+
+					<h2><?php echo esc_html__( 'Bundle-deler', 'lp-bundle-builder' ); ?></h2>
+					<p><?php echo esc_html__( 'Legg til, fjern og rediger deler. Hver del må ha et standardprodukt.', 'lp-bundle-builder' ); ?></p>
+					<div id="lp_parts_overview" class="lp-overview"></div>
+					<div id="lp_parts_container"></div>
+					<p><button type="button" class="button button-secondary" id="lp_add_part"><?php echo esc_html__( 'Legg til del', 'lp-bundle-builder' ); ?></button></p>
 
 					<?php submit_button( __( 'Opprett bundle', 'lp-bundle-builder' ) ); ?>
 				</form>
 			</div>
 
 			<style>
-				.lp-search-results {
-					max-width: 720px;
-					margin-top: 10px;
+				.lp-overview { margin-bottom: 12px; }
+				.lp-overview ul { list-style: disc; margin-left: 22px; }
+				.lp-part {
+					border: 1px solid #ccd0d4;
+					background: #fff;
+					padding: 14px;
+					margin-bottom: 12px;
+					border-radius: 4px;
+				}
+				.lp-part-grid {
+					display: grid;
+					grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+					gap: 12px;
+				}
+				.lp-field label { display: block; font-weight: 600; margin-bottom: 5px; }
+				.lp-search-wrap { position: relative; }
+				.lp-search-wrap input[type="search"], .lp-search-wrap input[type="number"] { width: 100%; }
+				.lp-results {
+					position: absolute;
+					left: 0;
+					right: 0;
 					background: #fff;
 					border: 1px solid #ccd0d4;
-					border-radius: 4px;
-					display: none;
-					max-height: 280px;
+					z-index: 30;
+					max-height: 170px;
 					overflow: auto;
+					display: none;
 				}
-				.lp-search-results button {
+				.lp-results button {
 					display: block;
 					width: 100%;
 					text-align: left;
-					padding: 10px 12px;
 					border: 0;
-					border-bottom: 1px solid #f0f0f1;
 					background: #fff;
+					padding: 7px 9px;
 					cursor: pointer;
+					border-bottom: 1px solid #f0f0f1;
 				}
-				.lp-search-results button:hover {
-					background: #f6f7f7;
-				}
-				.lp-selected-products {
-					max-width: 720px;
-					margin: 0;
-					padding: 0;
-				}
-				.lp-selected-products li {
-					display: flex;
+				.lp-pill-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+				.lp-pill {
+					display: inline-flex;
 					align-items: center;
-					justify-content: space-between;
-					gap: 12px;
-					padding: 10px 12px;
-					background: #fff;
-					border: 1px solid #ccd0d4;
-					border-radius: 4px;
-					margin-bottom: 8px;
-				}
-				.lp-selected-products .lp-product-meta {
-					color: #50575e;
+					padding: 4px 8px;
+					background: #f0f6fc;
+					border: 1px solid #c8d7e1;
+					border-radius: 999px;
 					font-size: 12px;
 				}
-				.lp-empty-selection {
-					padding: 12px;
-					background: #fff;
-					border: 1px dashed #ccd0d4;
-					border-radius: 4px;
-					max-width: 720px;
-					color: #50575e;
+				.lp-pill button {
+					margin-left: 6px;
+					border: 0;
+					background: transparent;
+					cursor: pointer;
+					color: #b32d2e;
+					font-weight: bold;
 				}
+				.lp-part-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+				.lp-part-error { color: #b32d2e; font-size: 12px; margin-top: 4px; display: none; }
 			</style>
 
 			<script>
 			(function(){
 				const ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
 				const ajaxNonce = <?php echo wp_json_encode( wp_create_nonce( self::AJAX_NONCE_ACTION ) ); ?>;
-				const searchInput = document.getElementById('lp_product_search');
-				const clearButton = document.getElementById('lp_clear_search');
-				const resultsBox = document.getElementById('lp_product_search_results');
-				const selectedList = document.getElementById('lp_selected_products');
-				const selectedInputs = document.getElementById('lp_selected_inputs');
 				const form = document.getElementById('lp-bundle-builder-form');
-				let timer = null;
-				let selected = [];
+				const partsContainer = document.getElementById('lp_parts_container');
+				const addPartButton = document.getElementById('lp_add_part');
+				const partsOverview = document.getElementById('lp_parts_overview');
+				const partsInput = document.getElementById('lp_parts_json');
+				let parts = [];
 
-				function renderEmptyState() {
-					if (selected.length) {
-						return;
-					}
-					selectedList.innerHTML = '<li class="lp-empty-selection"><?php echo esc_js( __( 'Ingen produkter valgt ennå.', 'lp-bundle-builder' ) ); ?></li>';
-					selectedInputs.innerHTML = '';
+				function normalizeItem(item){
+					return {
+						id: Number(item.value || item.id || 0),
+						label: String(item.label || item.name || ''),
+						slug: item.slug ? String(item.slug) : '',
+						name: item.name ? String(item.name) : ''
+					};
 				}
 
-				function renderSelected() {
-					if (!selected.length) {
-						renderEmptyState();
-						return;
-					}
+				function emptyPart(){
+					return { defaultProduct: null, products: [], categories: [], tags: [], discount: '' };
+				}
 
-					selectedList.innerHTML = '';
-					selectedInputs.innerHTML = '';
+				function createField(partIndex, fieldKey, apiType, fieldLabel, isMultiple){
+					const wrap = document.createElement('div');
+					wrap.className = 'lp-field';
+					const label = document.createElement('label');
+					label.textContent = fieldLabel;
+					wrap.appendChild(label);
 
-					selected.forEach(function(product, index){
-						const li = document.createElement('li');
-						const infoWrap = document.createElement('div');
-						const strong = document.createElement('strong');
-						strong.textContent = product.name;
-						const meta = document.createElement('div');
-						meta.className = 'lp-product-meta';
-						meta.textContent = '#' + product.id + (product.sku ? ' | SKU: ' + product.sku : '');
-						infoWrap.appendChild(strong);
-						infoWrap.appendChild(meta);
+					const searchWrap = document.createElement('div');
+					searchWrap.className = 'lp-search-wrap';
+					const input = document.createElement('input');
+					input.type = 'search';
+					input.placeholder = '<?php echo esc_js( __( 'Søk...', 'lp-bundle-builder' ) ); ?>';
+					const results = document.createElement('div');
+					results.className = 'lp-results';
+					searchWrap.appendChild(input);
+					searchWrap.appendChild(results);
+					wrap.appendChild(searchWrap);
 
-						const removeButton = document.createElement('button');
-						removeButton.type = 'button';
-						removeButton.className = 'button-link-delete';
-						removeButton.dataset.index = index;
-						removeButton.textContent = '<?php echo esc_js( __( 'Fjern', 'lp-bundle-builder' ) ); ?>';
+					const selected = document.createElement('div');
+					selected.className = 'lp-pill-list';
+					wrap.appendChild(selected);
 
-						li.appendChild(infoWrap);
-						li.appendChild(removeButton);
-						selectedList.appendChild(li);
-
-						const input = document.createElement('input');
-						input.type = 'hidden';
-						input.name = 'product_ids[]';
-						input.value = product.id;
-						selectedInputs.appendChild(input);
+					let timer = null;
+					input.addEventListener('input', function(){
+						const term = input.value.trim();
+						clearTimeout(timer);
+						if (term.length < 2) {
+							results.style.display = 'none';
+							results.innerHTML = '';
+							return;
+						}
+						timer = setTimeout(function(){
+							const params = new URLSearchParams();
+							params.append('action', 'lp_bundle_items_search');
+							params.append('nonce', ajaxNonce);
+							params.append('q', term);
+							params.append('type', apiType);
+							fetch(ajaxUrl, {
+								method: 'POST',
+								headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+								body: params.toString()
+							})
+							.then(r => r.json())
+							.then(response => {
+								if (!response || !response.success || !Array.isArray(response.data)) {
+									results.innerHTML = '';
+									results.style.display = 'none';
+									return;
+								}
+								results.innerHTML = '';
+								response.data.forEach(raw => {
+									const item = normalizeItem(raw);
+									if (!item.id || !item.label) {
+										return;
+									}
+									const btn = document.createElement('button');
+									btn.type = 'button';
+									btn.textContent = item.label;
+									btn.addEventListener('click', function(){
+										if (isMultiple) {
+											const list = parts[partIndex][fieldKey] || [];
+											if (!list.some(e => Number(e.id) === Number(item.id))) {
+												list.push(item);
+												parts[partIndex][fieldKey] = list;
+											}
+										} else {
+											parts[partIndex][fieldKey] = item;
+										}
+										input.value = '';
+										results.style.display = 'none';
+										render();
+									});
+									results.appendChild(btn);
+								});
+								results.style.display = results.children.length ? 'block' : 'none';
+							})
+							.catch(() => {
+								results.innerHTML = '';
+								results.style.display = 'none';
+							});
+						}, 250);
 					});
-				}
 
-				function hideResults() {
-					resultsBox.style.display = 'none';
-					resultsBox.innerHTML = '';
-				}
-
-				function showMessage(message) {
-					resultsBox.innerHTML = '<div style="padding:10px 12px;">' + message + '</div>';
-					resultsBox.style.display = 'block';
-				}
-
-				function runSearch(term) {
-					const params = new URLSearchParams();
-					params.append('action', 'lp_search_bundle_products');
-					params.append('nonce', ajaxNonce);
-					params.append('q', term);
-
-					fetch(ajaxUrl, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-						},
-						body: params.toString()
-					})
-					.then(function(response){ return response.json(); })
-					.then(function(response){
-						if (!response || !response.success || !Array.isArray(response.data)) {
-							showMessage('<?php echo esc_js( __( 'Ingen treff.', 'lp-bundle-builder' ) ); ?>');
-							return;
-						}
-
-						if (!response.data.length) {
-							showMessage('<?php echo esc_js( __( 'Ingen treff.', 'lp-bundle-builder' ) ); ?>');
-							return;
-						}
-
-						resultsBox.innerHTML = '';
-						response.data.forEach(function(product){
-							const btn = document.createElement('button');
-							const strong = document.createElement('strong');
-							const meta = document.createElement('span');
-							btn.type = 'button';
-							btn.dataset.product = JSON.stringify(product);
-							strong.textContent = product.name;
-							meta.textContent = '#' + product.id + (product.sku ? ' | SKU: ' + product.sku : '');
-							btn.appendChild(strong);
-							btn.appendChild(document.createElement('br'));
-							btn.appendChild(meta);
-							resultsBox.appendChild(btn);
+					const values = isMultiple ? (parts[partIndex][fieldKey] || []) : (parts[partIndex][fieldKey] ? [parts[partIndex][fieldKey]] : []);
+					values.forEach(function(item){
+						const pill = document.createElement('span');
+						pill.className = 'lp-pill';
+						pill.textContent = item.label || ('#' + item.id);
+						const remove = document.createElement('button');
+						remove.type = 'button';
+						remove.textContent = '×';
+						remove.addEventListener('click', function(){
+							if (isMultiple) {
+								parts[partIndex][fieldKey] = (parts[partIndex][fieldKey] || []).filter(e => Number(e.id) !== Number(item.id));
+							} else {
+								parts[partIndex][fieldKey] = null;
+							}
+							render();
 						});
-						resultsBox.style.display = 'block';
-					})
-					.catch(function(){
-						showMessage('<?php echo esc_js( __( 'Det oppstod en feil i søket.', 'lp-bundle-builder' ) ); ?>');
+						pill.appendChild(remove);
+						selected.appendChild(pill);
+					});
+
+					return wrap;
+				}
+
+				function renderOverview(){
+					if (!parts.length) {
+						partsOverview.innerHTML = '<p><?php echo esc_js( __( 'Ingen deler lagt til ennå.', 'lp-bundle-builder' ) ); ?></p>';
+						return;
+					}
+					const ul = document.createElement('ul');
+					parts.forEach(function(part, idx){
+						const li = document.createElement('li');
+						const def = part.defaultProduct ? part.defaultProduct.label : '<?php echo esc_js( __( 'Mangler standardprodukt', 'lp-bundle-builder' ) ); ?>';
+						li.textContent = (idx + 1) + '. ' + def + ' | Products: ' + (part.products || []).length + ' | Categories: ' + (part.categories || []).length + ' | Tags: ' + (part.tags || []).length + ' | Discount: ' + (part.discount || '0');
+						ul.appendChild(li);
+					});
+					partsOverview.innerHTML = '';
+					partsOverview.appendChild(ul);
+				}
+
+				function serializeParts(){
+					return parts.map(function(part){
+						return {
+							default_product: part.defaultProduct && part.defaultProduct.id ? Number(part.defaultProduct.id) : 0,
+							products: (part.products || []).map(i => Number(i.id)).filter(Boolean),
+							categories: (part.categories || []).map(i => Number(i.id)).filter(Boolean),
+							tags: (part.tags || []).map(i => Number(i.id)).filter(Boolean),
+							discount: String(part.discount || '').trim()
+						};
 					});
 				}
 
-				searchInput.addEventListener('input', function(){
-					const term = searchInput.value.trim();
-					clearTimeout(timer);
+				function render(){
+					partsContainer.innerHTML = '';
+					renderOverview();
+					parts.forEach(function(part, index){
+						const card = document.createElement('div');
+						card.className = 'lp-part';
 
-					if (term.length < 2) {
-						hideResults();
+						const head = document.createElement('div');
+						head.className = 'lp-part-head';
+						const h = document.createElement('strong');
+						h.textContent = '<?php echo esc_js( __( 'Del', 'lp-bundle-builder' ) ); ?> ' + (index + 1);
+						const rm = document.createElement('button');
+						rm.type = 'button';
+						rm.className = 'button-link-delete';
+						rm.textContent = '<?php echo esc_js( __( 'Fjern del', 'lp-bundle-builder' ) ); ?>';
+						rm.addEventListener('click', function(){
+							parts.splice(index, 1);
+							render();
+						});
+						head.appendChild(h);
+						head.appendChild(rm);
+						card.appendChild(head);
+
+						const grid = document.createElement('div');
+						grid.className = 'lp-part-grid';
+						grid.appendChild(createField(index, 'defaultProduct', 'default_product', '<?php echo esc_js( __( 'Default product', 'lp-bundle-builder' ) ); ?>', false));
+						grid.appendChild(createField(index, 'products', 'products', '<?php echo esc_js( __( 'Products', 'lp-bundle-builder' ) ); ?>', true));
+						grid.appendChild(createField(index, 'categories', 'categories', '<?php echo esc_js( __( 'Categories', 'lp-bundle-builder' ) ); ?>', true));
+						grid.appendChild(createField(index, 'tags', 'tags', '<?php echo esc_js( __( 'Tags', 'lp-bundle-builder' ) ); ?>', true));
+
+						const discountField = document.createElement('div');
+						discountField.className = 'lp-field';
+						const discountLabel = document.createElement('label');
+						discountLabel.textContent = '<?php echo esc_js( __( 'Discount', 'lp-bundle-builder' ) ); ?>';
+						const discountInput = document.createElement('input');
+						discountInput.type = 'number';
+						discountInput.step = '0.01';
+						discountInput.min = '0';
+						discountInput.value = part.discount || '';
+						discountInput.placeholder = '0';
+						discountInput.addEventListener('input', function(){
+							parts[index].discount = discountInput.value;
+							renderOverview();
+						});
+						discountField.appendChild(discountLabel);
+						discountField.appendChild(discountInput);
+						grid.appendChild(discountField);
+
+						card.appendChild(grid);
+						const err = document.createElement('div');
+						err.className = 'lp-part-error';
+						err.textContent = '<?php echo esc_js( __( 'Denne delen må ha et standardprodukt.', 'lp-bundle-builder' ) ); ?>';
+						if (!part.defaultProduct || !part.defaultProduct.id) {
+							err.style.display = 'block';
+						}
+						card.appendChild(err);
+						partsContainer.appendChild(card);
+					});
+					partsInput.value = JSON.stringify(serializeParts());
+				}
+
+				addPartButton.addEventListener('click', function(){
+					parts.push(emptyPart());
+					render();
+				});
+
+				form.addEventListener('submit', function(e){
+					if (!parts.length) {
+						e.preventDefault();
+						window.alert('<?php echo esc_js( __( 'Legg til minst én del før du oppretter bundlen.', 'lp-bundle-builder' ) ); ?>');
 						return;
 					}
-
-					timer = setTimeout(function(){
-						runSearch(term);
-					}, 250);
-				});
-
-				clearButton.addEventListener('click', function(){
-					searchInput.value = '';
-					hideResults();
-					searchInput.focus();
-				});
-
-				resultsBox.addEventListener('click', function(event){
-					const button = event.target.closest('button[data-product]');
-					if (!button) {
+					const invalid = parts.some(part => !part.defaultProduct || !part.defaultProduct.id);
+					if (invalid) {
+						e.preventDefault();
+						window.alert('<?php echo esc_js( __( 'Hver del må ha et standardprodukt.', 'lp-bundle-builder' ) ); ?>');
 						return;
 					}
-
-					const product = JSON.parse(button.dataset.product);
-					const exists = selected.some(function(item){ return String(item.id) === String(product.id); });
-					if (!exists) {
-						selected.push(product);
-						renderSelected();
-					}
-
-					searchInput.value = '';
-					hideResults();
-					searchInput.focus();
+					partsInput.value = JSON.stringify(serializeParts());
 				});
 
-				selectedList.addEventListener('click', function(event){
-					const button = event.target.closest('button[data-index]');
-					if (!button) {
-						return;
-					}
-
-					const index = parseInt(button.dataset.index, 10);
-					if (!Number.isNaN(index)) {
-						selected.splice(index, 1);
-						renderSelected();
-					}
-				});
-
-				form.addEventListener('submit', function(event){
-					if (!selected.length) {
-						event.preventDefault();
-						window.alert('<?php echo esc_js( __( 'Velg minst ett produkt før du oppretter bundlen.', 'lp-bundle-builder' ) ); ?>');
-					}
-				});
-
-				renderEmptyState();
+				parts.push(emptyPart());
+				render();
 			})();
 			</script>
 			<?php
 		}
 
-		public function ajax_search_products() {
+		public function ajax_bundle_items_search() {
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
 				wp_send_json_error( array(), 403 );
 			}
 
 			check_ajax_referer( self::AJAX_NONCE_ACTION, 'nonce' );
 
-			$term = isset( $_POST['q'] ) ? sanitize_text_field( wp_unslash( $_POST['q'] ) ) : '';
-			if ( '' === $term || strlen( $term ) < 2 ) {
+			$type = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
+			$search = isset( $_POST['q'] ) ? sanitize_text_field( wp_unslash( $_POST['q'] ) ) : '';
+			$type = $this->normalize_item_type( $type );
+
+			if ( ! $type || strlen( $search ) < 2 ) {
 				wp_send_json_success( array() );
 			}
 
-			$results = array();
-			foreach ( $this->search_products( $term ) as $product ) {
-				$results[] = array(
-					'id'   => $product->get_id(),
-					'name' => wp_strip_all_tags( $this->get_product_label( $product ) ),
-					'sku'  => $product->get_sku(),
-				);
+			$response = $this->remote_items_search( $type, $search );
+			if ( is_wp_error( $response ) ) {
+				wp_send_json_success( array() );
 			}
 
-			wp_send_json_success( $results );
+			wp_send_json_success( $this->normalize_rest_items_response( $response ) );
 		}
 
-		private function search_products( $term ) {
-			$term = trim( $term );
-			$ids  = array();
-
-			$query_args = array(
-				'post_type'              => array( 'product', 'product_variation' ),
-				'post_status'            => array( 'publish', 'private' ),
-				'posts_per_page'         => 20,
-				's'                      => $term,
-				'fields'                 => 'ids',
-				'orderby'                => 'title',
-				'order'                  => 'ASC',
-				'no_found_rows'          => true,
-				'ignore_sticky_posts'    => true,
-				'suppress_filters'       => false,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-			);
-
-			$search_query = new WP_Query( $query_args );
-			if ( ! empty( $search_query->posts ) ) {
-				$ids = array_merge( $ids, $search_query->posts );
+		public function ajax_bundle_items_fetch() {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_send_json_error( array(), 403 );
 			}
 
-			$sku_ids = get_posts(
+			check_ajax_referer( self::AJAX_NONCE_ACTION, 'nonce' );
+
+			$type = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
+			$type = $this->normalize_item_type( $type );
+			$items = isset( $_POST['items'] ) ? (array) wp_unslash( $_POST['items'] ) : array();
+			$items = $this->sanitize_unique_positive_int_array( $items );
+
+			if ( ! $type || empty( $items ) ) {
+				wp_send_json_success( array() );
+			}
+
+			$response = $this->remote_items_fetch( $type, $items );
+			if ( is_wp_error( $response ) ) {
+				wp_send_json_success( array() );
+			}
+
+			wp_send_json_success( $this->normalize_rest_items_response( $response ) );
+		}
+
+		private function remote_items_search( $type, $search ) {
+			$url = add_query_arg(
 				array(
-					'post_type'              => array( 'product', 'product_variation' ),
-					'post_status'            => array( 'publish', 'private' ),
-					'posts_per_page'         => 20,
-					'fields'                 => 'ids',
-					'orderby'                => 'title',
-					'order'                  => 'ASC',
-					'no_found_rows'          => true,
-					'ignore_sticky_posts'    => true,
-					'suppress_filters'       => false,
-					'update_post_meta_cache' => false,
-					'update_post_term_cache' => false,
-					'meta_query'             => array(
+					'search' => $search,
+					'type'   => $type,
+				),
+				rest_url( ltrim( self::ITEMS_REST_ROUTE, '/' ) )
+			);
+			$response = wp_remote_get(
+				$url,
+				array(
+					'timeout' => 15,
+				)
+			);
+
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+
+			$body = wp_remote_retrieve_body( $response );
+			$data = json_decode( $body, true );
+			return is_array( $data ) ? $data : array();
+		}
+
+		private function remote_items_fetch( $type, $items ) {
+			$url = rest_url( ltrim( self::ITEMS_REST_ROUTE, '/' ) );
+			$response = wp_remote_post(
+				$url,
+				array(
+					'timeout' => 15,
+					'headers' => array( 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode(
 						array(
-							'key'     => '_sku',
-							'value'   => $term,
-							'compare' => 'LIKE',
-						),
+							'type'  => $type,
+							'items' => $items,
+						)
 					),
 				)
 			);
 
-			if ( ! empty( $sku_ids ) ) {
-				$ids = array_merge( $ids, $sku_ids );
+			if ( is_wp_error( $response ) ) {
+				return $response;
 			}
 
-			$ids      = array_values( array_unique( array_map( 'absint', $ids ) ) );
-			$products = array();
-
-			foreach ( $ids as $product_id ) {
-				$product = wc_get_product( $product_id );
-				if ( ! $product || ! $this->is_allowed_bundle_item_product( $product ) ) {
-					continue;
-				}
-
-				$products[] = $product;
-				if ( count( $products ) >= 20 ) {
-					break;
-				}
-			}
-
-			return $products;
+			$body = wp_remote_retrieve_body( $response );
+			$data = json_decode( $body, true );
+			return is_array( $data ) ? $data : array();
 		}
 
-		private function get_product_label( WC_Product $product ) {
-			$name = $product->get_formatted_name();
-			if ( ! $name ) {
-				$name = $product->get_name();
+		private function normalize_rest_items_response( $response ) {
+			if ( isset( $response['items'] ) && is_array( $response['items'] ) ) {
+				return $response['items'];
 			}
-			return $name;
+			if ( isset( $response['data'] ) && is_array( $response['data'] ) ) {
+				return $response['data'];
+			}
+			return is_array( $response ) ? array_values( $response ) : array();
 		}
 
-		private function is_allowed_bundle_item_product( WC_Product $product ) {
-			if ( ! $product->exists() || ! $product->is_purchasable() ) {
-				return false;
-			}
-
-			$type = $product->get_type();
-
-			if ( self::PRODUCT_TYPE === $type || 'variable' === $type ) {
-				return false;
-			}
-
-			if (
-				false !== strpos( $type, 'bundle' ) ||
-				false !== strpos( $type, 'group' ) ||
-				false !== strpos( $type, 'composite' ) ||
-				false !== strpos( $type, 'booking' )
-			) {
-				return false;
-			}
-
-			return true;
+		private function normalize_item_type( $type ) {
+			$map = array(
+				'products'        => 'products',
+				'defaultproduct'  => 'default_product',
+				'default_product' => 'default_product',
+				'categories'      => 'categories',
+				'tags'            => 'tags',
+			);
+			$key = strtolower( str_replace( '-', '_', $type ) );
+			return isset( $map[ $key ] ) ? $map[ $key ] : '';
 		}
 
 		public function handle_create_bundle() {
@@ -517,36 +566,36 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( __( 'WooCommerce eller Easy Product Bundles er ikke aktiv.', 'lp-bundle-builder' ) );
 			}
 
-			$title      = isset( $_POST['bundle_title'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_title'] ) ) : '';
-			$status_raw = isset( $_POST['bundle_status'] ) ? sanitize_key( wp_unslash( $_POST['bundle_status'] ) ) : 'draft';
-			$status     = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : 'draft';
+			$title       = isset( $_POST['bundle_title'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_title'] ) ) : '';
+			$status_raw  = isset( $_POST['bundle_status'] ) ? sanitize_key( wp_unslash( $_POST['bundle_status'] ) ) : 'draft';
+			$status      = in_array( $status_raw, array( 'draft', 'publish' ), true ) ? $status_raw : 'draft';
 			$fixed_price = ! empty( $_POST['fixed_price'] ) ? 'true' : 'false';
 			$bundle_button_label = isset( $_POST['bundle_button_label'] ) ? sanitize_text_field( wp_unslash( $_POST['bundle_button_label'] ) ) : '';
 			if ( '' === $bundle_button_label ) {
 				$bundle_button_label = 'Configure bundle';
 			}
-			$product_ids = isset( $_POST['product_ids'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['product_ids'] ) ) : array();
-			$product_ids = array_values( array_unique( array_filter( $product_ids ) ) );
 
 			if ( '' === $title ) {
 				$title = sprintf( __( 'Nytt bundle %s', 'lp-bundle-builder' ), current_time( 'Y-m-d H:i' ) );
 			}
 
-			if ( empty( $product_ids ) ) {
-				$this->redirect_with_error( __( 'Du må velge minst ett produkt.', 'lp-bundle-builder' ) );
+			$parts_json = isset( $_POST['parts_json'] ) ? wp_unslash( $_POST['parts_json'] ) : '';
+			$parts_raw  = json_decode( $parts_json, true );
+			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
+				$this->redirect_with_error( __( 'Du må legge til minst én del.', 'lp-bundle-builder' ) );
 			}
 
-			$products = array();
-			foreach ( $product_ids as $product_id ) {
-				$product = wc_get_product( $product_id );
-				if ( ! $product || ! $this->is_allowed_bundle_item_product( $product ) ) {
-					continue;
+			$items = array();
+			foreach ( $parts_raw as $part_raw ) {
+				$sanitized_item = $this->build_bundle_item_from_part( is_array( $part_raw ) ? $part_raw : array() );
+				if ( empty( $sanitized_item['product'] ) ) {
+					$this->redirect_with_error( __( 'Hver del må ha et gyldig standardprodukt.', 'lp-bundle-builder' ) );
 				}
-				$products[] = $product;
+				$items[] = $sanitized_item;
 			}
 
-			if ( empty( $products ) ) {
-				$this->redirect_with_error( __( 'Ingen gyldige produkter ble valgt.', 'lp-bundle-builder' ) );
+			if ( empty( $items ) ) {
+				$this->redirect_with_error( __( 'Ingen gyldige deler ble sendt inn.', 'lp-bundle-builder' ) );
 			}
 
 			$bundle_post_id = wp_insert_post(
@@ -570,30 +619,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( __( 'Bundle-klassen kunne ikke lastes riktig.', 'lp-bundle-builder' ) );
 			}
 
-			$items            = array();
-			$default_products = array();
-			$loop_add_to_cart = true;
-
-			foreach ( $products as $product ) {
-				$product_id = $product->get_id();
-				$items[] = $this->build_bundle_item( $product_id );
-				$default_products[] = array(
-					'id'  => $product_id,
-					'qty' => 1,
-				);
-
-				if ( $loop_add_to_cart ) {
-					if ( $product->is_type( 'variable' ) ) {
-						$loop_add_to_cart = false;
-					} elseif ( $product->is_type( 'variation' ) && function_exists( '\\AsanaPlugins\\WooCommerce\\ProductBundles\\get_any_value_attributes' ) ) {
-						$variation_attributes = $product->get_variation_attributes( false );
-						$any_attributes = \AsanaPlugins\WooCommerce\ProductBundles\get_any_value_attributes( $variation_attributes );
-						if ( ! empty( $any_attributes ) ) {
-							$loop_add_to_cart = false;
-						}
-					}
-				}
-			}
+			$default_data = $this->build_default_products_data( $items );
 
 			$props = array(
 				'individual_theme'         => 'false',
@@ -609,8 +635,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'bundle_description'       => '',
 				'hide_items_price'         => 'no',
 				'items'                    => $items,
-				'default_products'         => wp_json_encode( $default_products ),
-				'loop_add_to_cart'         => $loop_add_to_cart ? 'true' : 'false',
+				'default_products'         => $default_data['default_products_json'],
+				'loop_add_to_cart'         => $default_data['loop_add_to_cart'],
 				'sync_stock_quantity'      => 'false',
 				'bundle_button_label'      => $bundle_button_label,
 			);
@@ -625,7 +651,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
 			);
 			$model->delete_bundle( $bundle_post_id );
-			foreach ( $default_products as $default_product ) {
+
+			foreach ( $default_data['rows'] as $default_product ) {
 				$model->add(
 					array(
 						'bundle_id'  => $bundle_post_id,
@@ -656,11 +683,39 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			exit;
 		}
 
-		private function build_bundle_item( $product_id ) {
+		private function build_bundle_item_from_part( $part ) {
+			$item = $this->bundle_item_defaults();
+
+			$product_id = isset( $part['default_product'] ) ? absint( $part['default_product'] ) : 0;
+			if ( $product_id > 0 && wc_get_product( $product_id ) ) {
+				$item['product'] = $product_id;
+			}
+
+			$item['products'] = isset( $part['products'] ) ? $this->sanitize_unique_positive_int_array( $part['products'] ) : array();
+			$item['categories'] = isset( $part['categories'] ) ? $this->sanitize_unique_positive_int_array( $part['categories'] ) : array();
+			$item['tags'] = isset( $part['tags'] ) ? $this->sanitize_unique_positive_int_array( $part['tags'] ) : array();
+
+			$discount_input = isset( $part['discount'] ) ? trim( (string) $part['discount'] ) : '';
+			if ( '' !== $discount_input ) {
+				$discount_value = (float) $discount_input;
+				if ( $discount_value > 0 ) {
+					$item['discount_type'] = 'percentage';
+					$item['discount']      = $discount_value;
+				}
+			}
+
+			if ( empty( $item['products'] ) && empty( $item['categories'] ) && empty( $item['tags'] ) && ! empty( $item['product'] ) ) {
+				$item['products'] = array( (int) $item['product'] );
+			}
+
+			return $this->sanitize_bundle_item( $item );
+		}
+
+		private function bundle_item_defaults() {
 			return array(
 				'optional'             => 'false',
-				'selected'             => 'true',
-				'products'             => array( (int) $product_id ),
+				'selected'             => 'false',
+				'products'             => array(),
 				'excluded_products'    => array(),
 				'categories'           => array(),
 				'excluded_categories'  => array(),
@@ -670,7 +725,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'edit_quantity'        => 'false',
 				'discount_type'        => 'none',
 				'discount'             => '',
-				'product'              => (int) $product_id,
+				'product'              => '',
 				'min_quantity'         => 1,
 				'max_quantity'         => '',
 				'quantity'             => 1,
@@ -678,19 +733,125 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'order'                => 'DESC',
 				'title'                => '',
 				'description'          => '',
-				'select_product_title' => __( 'Please select a product!', 'asnp-easy-product-bundles' ),
-				'product_list_title'   => __( 'Please select your product!', 'asnp-easy-product-bundles' ),
-				'modal_header_title'   => __( 'Please select your product', 'asnp-easy-product-bundles' ),
+				'select_product_title' => 'Please select a product!',
+				'product_list_title'   => 'Please select your product!',
+				'modal_header_title'   => 'Please select your product',
 				'image_url'            => '',
+			);
+		}
+
+		private function sanitize_bundle_item( $item ) {
+			$defaults = $this->bundle_item_defaults();
+			$item     = wp_parse_args( $item, $defaults );
+
+			$item['products']            = $this->sanitize_unique_positive_int_array( $item['products'] );
+			$item['excluded_products']   = $this->sanitize_unique_positive_int_array( $item['excluded_products'] );
+			$item['categories']          = $this->sanitize_unique_positive_int_array( $item['categories'] );
+			$item['excluded_categories'] = $this->sanitize_unique_positive_int_array( $item['excluded_categories'] );
+			$item['tags']                = $this->sanitize_unique_positive_int_array( $item['tags'] );
+			$item['excluded_tags']       = $this->sanitize_unique_positive_int_array( $item['excluded_tags'] );
+
+			$product_id = absint( $item['product'] );
+			$item['product'] = $product_id > 0 ? $product_id : '';
+
+			$item['optional']      = ( 'true' === $item['optional'] ) ? 'true' : 'false';
+			$item['selected']      = ( 'true' === $item['selected'] ) ? 'true' : 'false';
+			$item['edit_quantity'] = ( 'true' === $item['edit_quantity'] ) ? 'true' : 'false';
+			$item['query_relation'] = ( 'AND' === strtoupper( (string) $item['query_relation'] ) ) ? 'AND' : 'OR';
+
+			$item['quantity']     = isset( $item['quantity'] ) ? (int) $item['quantity'] : 1;
+			$item['min_quantity'] = isset( $item['min_quantity'] ) ? (int) $item['min_quantity'] : 1;
+			$item['max_quantity'] = ( '' === $item['max_quantity'] || null === $item['max_quantity'] ) ? '' : (int) $item['max_quantity'];
+
+			$item['discount'] = ( '' === $item['discount'] || null === $item['discount'] ) ? '' : (float) $item['discount'];
+			$item['discount_type'] = ( '' !== $item['discount'] && (float) $item['discount'] > 0 ) ? 'percentage' : 'none';
+			if ( 'none' === $item['discount_type'] ) {
+				$item['discount'] = '';
+			}
+
+			$item['orderby']              = sanitize_text_field( $item['orderby'] );
+			$item['order']                = sanitize_text_field( $item['order'] );
+			$item['title']                = sanitize_text_field( $item['title'] );
+			$item['select_product_title'] = sanitize_text_field( $item['select_product_title'] );
+			$item['product_list_title']   = sanitize_text_field( $item['product_list_title'] );
+			$item['modal_header_title']   = sanitize_text_field( $item['modal_header_title'] );
+			$item['description']          = wp_kses_post( $item['description'] );
+			$item['image_url']            = esc_url_raw( $item['image_url'] );
+
+			return $item;
+		}
+
+		private function sanitize_unique_positive_int_array( $values ) {
+			$values = array_map( 'absint', (array) $values );
+			$values = array_filter(
+				$values,
+				function( $value ) {
+					return $value > 0;
+				}
+			);
+			return array_values( array_unique( $values ) );
+		}
+
+		private function build_default_products_data( $items ) {
+			$rows             = array();
+			$is_valid_config  = true;
+			$loop_add_to_cart = 'true';
+
+			foreach ( $items as $item ) {
+				$qty = isset( $item['quantity'] ) ? (int) $item['quantity'] : 0;
+				$pid = isset( $item['product'] ) ? absint( $item['product'] ) : 0;
+				if ( $qty <= 0 || $pid <= 0 ) {
+					$is_valid_config = false;
+					break;
+				}
+
+				$product = wc_get_product( $pid );
+				if ( ! $product || ! $product->is_purchasable() ) {
+					$is_valid_config = false;
+					break;
+				}
+
+				$rows[] = array(
+					'id'  => $pid,
+					'qty' => $qty,
+				);
+
+				if ( 'true' === $loop_add_to_cart ) {
+					if ( 'true' === $item['optional'] && 'false' === $item['selected'] ) {
+						$loop_add_to_cart = 'false';
+					} elseif ( $product->is_type( 'variable' ) ) {
+						$loop_add_to_cart = 'false';
+					} elseif ( $product->is_type( 'variation' ) && function_exists( '\\AsanaPlugins\\WooCommerce\\ProductBundles\\get_any_value_attributes' ) ) {
+						$variation_attributes = $product->get_variation_attributes( false );
+						$any_attributes       = \AsanaPlugins\WooCommerce\ProductBundles\get_any_value_attributes( $variation_attributes );
+						if ( ! empty( $any_attributes ) ) {
+							$loop_add_to_cart = 'false';
+						}
+					}
+				}
+			}
+
+			if ( ! $is_valid_config ) {
+				return array(
+					'default_products_json' => '',
+					'rows'                  => array(),
+					'loop_add_to_cart'      => 'false',
+				);
+			}
+
+			return array(
+				'default_products_json' => wp_json_encode( $rows ),
+				'rows'                  => $rows,
+				'loop_add_to_cart'      => $loop_add_to_cart,
 			);
 		}
 
 		private function redirect_with_error( $message ) {
 			$redirect_url = add_query_arg(
 				array(
-					'post_type'        => 'product',
-					'page'             => self::MENU_SLUG,
-					'lp_bundle_error'  => rawurlencode( wp_strip_all_tags( $message ) ),
+					'post_type'       => 'product',
+					'page'            => self::MENU_SLUG,
+					'lp_bundle_error' => rawurlencode( wp_strip_all_tags( $message ) ),
 				),
 				admin_url( 'edit.php' )
 			);
