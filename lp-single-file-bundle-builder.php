@@ -306,7 +306,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					<?php if ( '' !== $image_prompt ) : ?>
 						<div class="lp-image-prompt-box">
 							<h2><?php echo esc_html__( 'Image Prompt for ChatGPT', 'lp-bundle-builder' ); ?></h2>
-							<p><?php echo esc_html__( 'Bruk denne prompten i ChatGPT sammen med produktbildene under.', 'lp-bundle-builder' ); ?></p>
+							<p><?php echo esc_html__( 'Bruk denne prompten i ChatGPT sammen med bildene i lenkene under.', 'lp-bundle-builder' ); ?></p>
+							<p><?php echo esc_html__( 'For best resultat: åpne eller last opp kildebildene i samme chat, og lim inn prompten under.', 'lp-bundle-builder' ); ?></p>
 							<p><?php echo esc_html__( 'ChatGPT skal kun komponere produktene i ett bundle-bilde, ikke endre selve produktene.', 'lp-bundle-builder' ); ?></p>
 							<p class="lp-image-prompt-actions">
 								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $created_id . '&action=edit' ) ); ?>" class="button button-secondary"><?php echo esc_html__( 'Open product', 'lp-bundle-builder' ); ?></a>
@@ -1510,20 +1511,12 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					continue;
 				}
 
-				$featured_id  = $product->get_image_id();
-				$featured_url = $featured_id ? wp_get_attachment_image_url( $featured_id, 'full' ) : '';
+				$featured_url = $this->get_best_product_image_url( $product );
 				if ( '' === (string) $featured_url ) {
 					continue;
 				}
 
-				$gallery_urls = array();
-				$gallery_ids  = method_exists( $product, 'get_gallery_image_ids' ) ? (array) $product->get_gallery_image_ids() : array();
-				foreach ( $gallery_ids as $gallery_id ) {
-					$gallery_url = wp_get_attachment_image_url( (int) $gallery_id, 'full' );
-					if ( '' !== (string) $gallery_url ) {
-						$gallery_urls[] = $gallery_url;
-					}
-				}
+				$gallery_urls = $this->get_product_gallery_urls( $product );
 
 				$sources[] = array(
 					'index'              => $index + 1,
@@ -1540,6 +1533,68 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return $sources;
 		}
 
+		private function get_product_gallery_urls( $product ) {
+			$gallery_urls = array();
+			if ( ! $product || ! is_a( $product, 'WC_Product' ) || ! method_exists( $product, 'get_gallery_image_ids' ) ) {
+				return $gallery_urls;
+			}
+
+			$gallery_ids = (array) $product->get_gallery_image_ids();
+			foreach ( $gallery_ids as $gallery_id ) {
+				$gallery_url = wp_get_attachment_image_url( (int) $gallery_id, 'full' );
+				if ( '' !== (string) $gallery_url ) {
+					$gallery_urls[] = (string) $gallery_url;
+				}
+			}
+
+			return array_values( array_unique( $gallery_urls ) );
+		}
+
+		private function get_best_product_image_url( $product ) {
+			if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+				return '';
+			}
+
+			$featured_id = (int) $product->get_image_id();
+			if ( $featured_id > 0 ) {
+				$featured_url = wp_get_attachment_image_url( $featured_id, 'full' );
+				if ( '' !== (string) $featured_url ) {
+					return (string) $featured_url;
+				}
+			}
+
+			$parent_product = null;
+			if ( $product->is_type( 'variation' ) ) {
+				$parent_id = (int) $product->get_parent_id();
+				if ( $parent_id > 0 ) {
+					$parent_product = wc_get_product( $parent_id );
+					if ( $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+						$parent_featured_id = (int) $parent_product->get_image_id();
+						if ( $parent_featured_id > 0 ) {
+							$parent_featured_url = wp_get_attachment_image_url( $parent_featured_id, 'full' );
+							if ( '' !== (string) $parent_featured_url ) {
+								return (string) $parent_featured_url;
+							}
+						}
+					}
+				}
+			}
+
+			$product_gallery_urls = $this->get_product_gallery_urls( $product );
+			if ( ! empty( $product_gallery_urls ) ) {
+				return (string) $product_gallery_urls[0];
+			}
+
+			if ( $product->is_type( 'variation' ) && $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+				$parent_gallery_urls = $this->get_product_gallery_urls( $parent_product );
+				if ( ! empty( $parent_gallery_urls ) ) {
+					return (string) $parent_gallery_urls[0];
+				}
+			}
+
+			return '';
+		}
+
 		private function build_bundle_image_prompt( $bundle, $image_sources ) {
 			$bundle_name = '';
 			if ( $bundle && is_a( $bundle, 'WC_Product' ) ) {
@@ -1552,7 +1607,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$lines   = array();
 			$lines[] = 'Create one finished square ecommerce bundle product image for: ' . $bundle_name . '.';
 			$lines[] = '';
-			$lines[] = 'Use only the attached source product images.';
+			$lines[] = 'If working in ChatGPT, use the uploaded source images or the exact source image URLs below as the only visual source material.';
+			$lines[] = 'Use only the provided source product images and/or source image URLs below.';
 			$lines[] = 'Do not invent or redesign any part of the products.';
 			$lines[] = 'Do not change color, materials, proportions, construction, branding, or product details.';
 			$lines[] = 'Only remove background, reposition, scale proportionally, and compose the provided products into one clean ecommerce image.';
@@ -1560,7 +1616,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$lines[] = 'Accuracy is more important than creativity.';
 			$lines[] = '';
 			$lines[] = 'Hard constraints:';
-			$lines[] = '- Use ONLY the provided source product images as source material.';
+			$lines[] = '- Use ONLY the provided source product images and/or source image URLs below as source material.';
 			$lines[] = '- NEVER invent missing details.';
 			$lines[] = '- NEVER redesign products or make fantasy versions.';
 			$lines[] = '- NEVER change materials, colors, proportions, construction, wheels, handles, fabrics, accessories, branding, or shape.';
