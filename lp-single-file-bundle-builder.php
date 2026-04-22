@@ -79,6 +79,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'manage_stock'         => 'no',
 				'stock_status'         => 'instock',
 				'tax_status'           => 'taxable',
+				'bundle_image_mode'    => 'ai_prompt',
 			);
 		}
 
@@ -98,6 +99,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			return wc_format_decimal( $value, wc_get_price_decimals() );
+		}
+
+		private function sanitize_bundle_image_mode( $value ) {
+			$mode = sanitize_key( (string) $value );
+			return in_array( $mode, array( 'ai_prompt', 'local_composite' ), true ) ? $mode : 'ai_prompt';
 		}
 
 		private function sanitize_defaults_option( $raw_defaults ) {
@@ -125,6 +131,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$tax_status = in_array( $tax_status, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status : $defaults['tax_status'];
 
 			$fixed_price_amount = isset( $raw_defaults['fixed_price_amount'] ) ? $this->sanitize_decimal_string( $raw_defaults['fixed_price_amount'] ) : $defaults['fixed_price_amount'];
+			$bundle_image_mode = isset( $raw_defaults['bundle_image_mode'] ) ? $this->sanitize_bundle_image_mode( $raw_defaults['bundle_image_mode'] ) : $defaults['bundle_image_mode'];
 
 			return array(
 				'product_status'      => $product_status,
@@ -135,6 +142,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'stock_status'        => $stock_status,
 				'tax_status'          => $tax_status,
 				'fixed_price_amount'  => $fixed_price_amount,
+				'bundle_image_mode'   => $bundle_image_mode,
 			);
 		}
 
@@ -159,6 +167,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'manage_stock'        => isset( $_POST['manage_stock'] ) ? wp_unslash( $_POST['manage_stock'] ) : '',
 				'stock_status'        => isset( $_POST['stock_status'] ) ? wp_unslash( $_POST['stock_status'] ) : '',
 				'tax_status'          => isset( $_POST['tax_status'] ) ? wp_unslash( $_POST['tax_status'] ) : '',
+				'bundle_image_mode'   => isset( $_POST['bundle_image_mode'] ) ? wp_unslash( $_POST['bundle_image_mode'] ) : '',
 			);
 
 			update_option( self::DEFAULTS_OPTION, $this->sanitize_defaults_option( $raw_defaults ) );
@@ -242,6 +251,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										<option value="taxable" <?php selected( $defaults['tax_status'], 'taxable' ); ?>><?php echo esc_html__( 'Taxable', 'lp-bundle-builder' ); ?></option>
 										<option value="shipping" <?php selected( $defaults['tax_status'], 'shipping' ); ?>><?php echo esc_html__( 'Shipping only', 'lp-bundle-builder' ); ?></option>
 										<option value="none" <?php selected( $defaults['tax_status'], 'none' ); ?>><?php echo esc_html__( 'None', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_image_mode"><?php echo esc_html__( 'Bundle image mode default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_image_mode" name="bundle_image_mode">
+										<option value="ai_prompt" <?php selected( $defaults['bundle_image_mode'], 'ai_prompt' ); ?>><?php echo esc_html__( 'AI prompt', 'lp-bundle-builder' ); ?></option>
+										<option value="local_composite" <?php selected( $defaults['bundle_image_mode'], 'local_composite' ); ?>><?php echo esc_html__( 'Local composite', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -360,6 +378,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 									<select id="lp_bundle_status" name="bundle_status">
 										<option value="draft" <?php selected( $defaults['product_status'], 'draft' ); ?>><?php echo esc_html__( 'Kladd', 'lp-bundle-builder' ); ?></option>
 										<option value="publish" <?php selected( $defaults['product_status'], 'publish' ); ?>><?php echo esc_html__( 'Publisert', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_bundle_image_mode"><?php echo esc_html__( 'Bundle image mode', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_image_mode" name="bundle_image_mode">
+										<option value="ai_prompt" <?php selected( $defaults['bundle_image_mode'], 'ai_prompt' ); ?>><?php echo esc_html__( 'AI prompt', 'lp-bundle-builder' ); ?></option>
+										<option value="local_composite" <?php selected( $defaults['bundle_image_mode'], 'local_composite' ); ?>><?php echo esc_html__( 'Local composite', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -1141,6 +1168,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			$tax_status_raw = isset( $_POST['tax_status'] ) ? sanitize_key( wp_unslash( $_POST['tax_status'] ) ) : $defaults['tax_status'];
 			$tax_status     = in_array( $tax_status_raw, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status_raw : $defaults['tax_status'];
+			$bundle_image_mode_raw = isset( $_POST['bundle_image_mode'] ) ? wp_unslash( $_POST['bundle_image_mode'] ) : $defaults['bundle_image_mode'];
+			$bundle_image_mode = $this->sanitize_bundle_image_mode( $bundle_image_mode_raw );
 
 			if ( '' === $title ) {
 				$title = sprintf( __( 'Nytt bundle %s', 'lp-bundle-builder' ), current_time( 'Y-m-d H:i' ) );
@@ -1273,13 +1302,21 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			$bundle_media_data = $this->get_bundle_media_data( $default_data['rows'] );
-			$featured_image_id = isset( $bundle_media_data['featured_image_id'] ) ? absint( $bundle_media_data['featured_image_id'] ) : 0;
-			$gallery_image_ids = isset( $bundle_media_data['gallery_image_ids'] ) ? $this->sanitize_unique_positive_int_array( $bundle_media_data['gallery_image_ids'] ) : array();
+			$fallback_featured_image_id = isset( $bundle_media_data['fallback_featured_image_id'] ) ? absint( $bundle_media_data['fallback_featured_image_id'] ) : 0;
+			$all_source_image_ids = isset( $bundle_media_data['all_source_image_ids'] ) ? $this->sanitize_unique_positive_int_array( $bundle_media_data['all_source_image_ids'] ) : array();
+			$featured_image_id = $fallback_featured_image_id;
+
+			if ( 'local_composite' === $bundle_image_mode ) {
+				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $title );
+				if ( $composite_image_id > 0 ) {
+					$featured_image_id = $composite_image_id;
+				}
+			}
 
 			if ( $featured_image_id > 0 && (int) $bundle->get_image_id() <= 0 ) {
 				$bundle->set_image_id( $featured_image_id );
 			}
-			$bundle->set_gallery_image_ids( $gallery_image_ids );
+			$bundle->set_gallery_image_ids( $all_source_image_ids );
 
 			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
 				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
@@ -1301,7 +1338,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$bundle = \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle::sync( $bundle, false );
 			$bundle->save();
 			$image_sources = $this->get_bundle_image_source_data( $default_data['rows'] );
-			$image_prompt  = $this->build_bundle_image_prompt( $bundle, $image_sources );
+			$image_prompt  = '';
+			if ( 'ai_prompt' === $bundle_image_mode ) {
+				$image_prompt = $this->build_bundle_image_prompt( $bundle, $image_sources );
+			}
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_mode', $bundle_image_mode );
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_prompt', $image_prompt );
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_sources', wp_json_encode( $image_sources ) );
 
@@ -1577,8 +1618,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			if ( ! is_array( $default_products_rows ) ) {
 				return array(
-					'featured_image_id' => 0,
-					'gallery_image_ids' => array(),
+					'fallback_featured_image_id' => 0,
+					'all_source_image_ids'       => array(),
 				);
 			}
 
@@ -1603,12 +1644,175 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 			}
 
-			$featured_image_id = ! empty( $ordered_image_ids ) ? (int) $ordered_image_ids[0] : 0;
-			$gallery_image_ids = ! empty( $ordered_image_ids ) ? array_slice( $ordered_image_ids, 1 ) : array();
+			$fallback_featured_image_id = ! empty( $ordered_image_ids ) ? (int) $ordered_image_ids[0] : 0;
 
 			return array(
-				'featured_image_id' => $featured_image_id,
-				'gallery_image_ids' => array_values( $gallery_image_ids ),
+				'fallback_featured_image_id' => $fallback_featured_image_id,
+				'all_source_image_ids'       => array_values( $ordered_image_ids ),
+			);
+		}
+
+		private function get_primary_product_attachment_id( $product ) {
+			$media_ids = $this->get_product_media_ids( $product );
+			if ( empty( $media_ids ) ) {
+				return 0;
+			}
+
+			return (int) $media_ids[0];
+		}
+
+		private function generate_bundle_composite_image( $bundle_post_id, $default_products_rows, $bundle_name = '' ) {
+			if ( ! class_exists( 'Imagick' ) || ! class_exists( 'ImagickPixel' ) ) {
+				return 0;
+			}
+
+			$source_image_paths = array();
+			foreach ( (array) $default_products_rows as $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				if ( $product_id <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+					continue;
+				}
+
+				$attachment_id = $this->get_primary_product_attachment_id( $product );
+				if ( $attachment_id <= 0 ) {
+					continue;
+				}
+
+				$file_path = get_attached_file( $attachment_id );
+				if ( ! $file_path || ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
+					continue;
+				}
+
+				$source_image_paths[] = (string) $file_path;
+			}
+
+			if ( empty( $source_image_paths ) ) {
+				return 0;
+			}
+
+			$source_image_paths = array_values( array_unique( $source_image_paths ) );
+			$canvas_size = 1600;
+			$slots = $this->get_bundle_composite_slots( count( $source_image_paths ), $canvas_size );
+			if ( empty( $slots ) ) {
+				return 0;
+			}
+
+			try {
+				$canvas = new \Imagick();
+				$canvas->newImage( $canvas_size, $canvas_size, new \ImagickPixel( '#f9f9f7' ) );
+				$canvas->setImageFormat( 'jpeg' );
+				$canvas->setImageColorspace( \Imagick::COLORSPACE_SRGB );
+
+				foreach ( $slots as $index => $slot ) {
+					if ( ! isset( $source_image_paths[ $index ] ) ) {
+						continue;
+					}
+
+					$image = new \Imagick();
+					$image->readImage( $source_image_paths[ $index ] );
+					$image->setImageColorspace( \Imagick::COLORSPACE_SRGB );
+					$image->setImageBackgroundColor( new \ImagickPixel( 'transparent' ) );
+					$image = $image->mergeImageLayers( \Imagick::LAYERMETHOD_MERGE );
+					$image->thumbnailImage( (int) $slot['w'], (int) $slot['h'], true, true );
+
+					$x = (int) $slot['x'] + (int) floor( ( (int) $slot['w'] - $image->getImageWidth() ) / 2 );
+					$y = (int) $slot['y'] + (int) floor( ( (int) $slot['h'] - $image->getImageHeight() ) / 2 );
+					$canvas->compositeImage( $image, \Imagick::COMPOSITE_OVER, $x, $y );
+					$image->clear();
+					$image->destroy();
+				}
+
+				$canvas->setImageCompressionQuality( 90 );
+				$image_binary = $canvas->getImagesBlob();
+				$canvas->clear();
+				$canvas->destroy();
+			} catch ( \Exception $exception ) {
+				return 0;
+			}
+
+			if ( '' === (string) $image_binary ) {
+				return 0;
+			}
+
+			$bundle_name = sanitize_title( (string) $bundle_name );
+			if ( '' === $bundle_name ) {
+				$bundle_name = 'bundle';
+			}
+
+			$filename = sprintf( '%1$s-composite-%2$d.jpg', $bundle_name, absint( $bundle_post_id ) );
+			$upload = wp_upload_bits( $filename, null, $image_binary );
+			if ( ! is_array( $upload ) || ! empty( $upload['error'] ) || empty( $upload['file'] ) ) {
+				return 0;
+			}
+
+			$file_path = (string) $upload['file'];
+			$file_type = wp_check_filetype( $file_path, null );
+			$attachment_id = wp_insert_attachment(
+				array(
+					'post_mime_type' => isset( $file_type['type'] ) ? $file_type['type'] : 'image/jpeg',
+					'post_title'     => sprintf( 'Bundle composite %d', absint( $bundle_post_id ) ),
+					'post_content'   => '',
+					'post_status'    => 'inherit',
+				),
+				$file_path,
+				absint( $bundle_post_id )
+			);
+
+			if ( is_wp_error( $attachment_id ) || $attachment_id <= 0 ) {
+				return 0;
+			}
+
+			if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/image.php';
+			}
+
+			$metadata = wp_generate_attachment_metadata( $attachment_id, $file_path );
+			if ( ! is_wp_error( $metadata ) && is_array( $metadata ) ) {
+				wp_update_attachment_metadata( $attachment_id, $metadata );
+			}
+
+			return (int) $attachment_id;
+		}
+
+		private function get_bundle_composite_slots( $count, $canvas_size ) {
+			$count = max( 1, min( 4, (int) $count ) );
+			$canvas_size = max( 600, (int) $canvas_size );
+			$pad = (int) round( $canvas_size * 0.06 );
+			$inner = $canvas_size - ( $pad * 2 );
+
+			if ( 1 === $count ) {
+				return array( array( 'x' => $pad, 'y' => $pad, 'w' => $inner, 'h' => $inner ) );
+			}
+
+			if ( 2 === $count ) {
+				$w = (int) floor( ( $inner - $pad ) / 2 );
+				return array(
+					array( 'x' => $pad, 'y' => $pad, 'w' => $w, 'h' => $inner ),
+					array( 'x' => $pad + $w + $pad, 'y' => $pad, 'w' => $w, 'h' => $inner ),
+				);
+			}
+
+			if ( 3 === $count ) {
+				$half_w = (int) floor( ( $inner - $pad ) / 2 );
+				$half_h = (int) floor( ( $inner - $pad ) / 2 );
+				return array(
+					array( 'x' => $pad, 'y' => $pad, 'w' => $half_w, 'h' => $inner ),
+					array( 'x' => $pad + $half_w + $pad, 'y' => $pad, 'w' => $half_w, 'h' => $half_h ),
+					array( 'x' => $pad + $half_w + $pad, 'y' => $pad + $half_h + $pad, 'w' => $half_w, 'h' => $half_h ),
+				);
+			}
+
+			$cell = (int) floor( ( $inner - $pad ) / 2 );
+			return array(
+				array( 'x' => $pad, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad + $cell + $pad, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad, 'y' => $pad + $cell + $pad, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad + $cell + $pad, 'y' => $pad + $cell + $pad, 'w' => $cell, 'h' => $cell ),
 			);
 		}
 
