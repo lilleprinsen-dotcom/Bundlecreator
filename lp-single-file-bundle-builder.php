@@ -1996,6 +1996,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			if ( '' !== $intro_sentence ) {
 				$bundle->set_short_description( wp_kses_post( '<p>' . esc_html( $intro_sentence ) . '</p>' ) );
 			}
+			$this->set_combined_bundle_categories( $bundle_post_id, $default_data['rows'] );
 
 			$bundle_media_data = $this->get_bundle_media_data( $default_data['rows'] );
 			$fallback_featured_image_id = isset( $bundle_media_data['fallback_featured_image_id'] ) ? absint( $bundle_media_data['fallback_featured_image_id'] ) : 0;
@@ -2305,6 +2306,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			if ( '' !== $intro_sentence ) {
 				$bundle->set_short_description( wp_kses_post( '<p>' . esc_html( $intro_sentence ) . '</p>' ) );
 			}
+			$this->set_combined_bundle_categories( $bundle_post_id, $default_data['rows'] );
 
 			$bundle_image_mode        = isset( $settings['bundle_image_mode'] ) ? $this->sanitize_bundle_image_mode( $settings['bundle_image_mode'] ) : 'ai_prompt';
 			$bundle_composite_options = isset( $settings['bundle_composite_options'] ) ? $this->sanitize_bundle_composite_options( $settings['bundle_composite_options'] ) : $this->sanitize_bundle_composite_options( array() );
@@ -2546,6 +2548,55 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'default_products_total' => (float) wc_format_decimal( $default_total, wc_get_price_decimals() ),
 				'generated_sku'          => implode( '+', $generated_sku_parts ),
 			);
+		}
+
+		private function get_combined_bundle_category_ids( $default_products_rows ) {
+			$category_ids = array();
+			if ( ! is_array( $default_products_rows ) ) {
+				return $category_ids;
+			}
+
+			foreach ( $default_products_rows as $row ) {
+				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+				if ( $product_id <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $product_id );
+				if ( $product && is_a( $product, 'WC_Product' ) && $product->is_type( 'variation' ) && (int) $product->get_parent_id() > 0 ) {
+					$product_id = (int) $product->get_parent_id();
+				}
+
+				$product_category_ids = wp_get_object_terms(
+					$product_id,
+					'product_cat',
+					array(
+						'fields' => 'ids',
+					)
+				);
+
+				if ( is_wp_error( $product_category_ids ) || empty( $product_category_ids ) || ! is_array( $product_category_ids ) ) {
+					continue;
+				}
+
+				$category_ids = array_merge( $category_ids, $product_category_ids );
+			}
+
+			return $this->sanitize_unique_positive_int_array( $category_ids );
+		}
+
+		private function set_combined_bundle_categories( $bundle_post_id, $default_products_rows ) {
+			$bundle_post_id = absint( $bundle_post_id );
+			if ( $bundle_post_id <= 0 ) {
+				return;
+			}
+
+			$category_ids = $this->get_combined_bundle_category_ids( $default_products_rows );
+			if ( empty( $category_ids ) ) {
+				return;
+			}
+
+			wp_set_object_terms( $bundle_post_id, $category_ids, 'product_cat', false );
 		}
 
 		private function set_bundle_sku_safely( $bundle, $suggested_sku, $bundle_post_id ) {
