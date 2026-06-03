@@ -28,6 +28,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			add_action( 'wp_ajax_lp_bundle_items_search', array( $this, 'ajax_bundle_items_search' ) );
 			add_action( 'wp_ajax_lp_bundle_items_fetch', array( $this, 'ajax_bundle_items_fetch' ) );
 			add_action( 'wp_ajax_lp_bundle_image_preview', array( $this, 'ajax_bundle_image_preview' ) );
+			add_action( 'wp_ajax_lp_bundle_variant_candidates', array( $this, 'ajax_bundle_variant_candidates' ) );
 			add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		}
 
@@ -431,6 +432,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			$created_id = isset( $_GET['lp_bundle_id'] ) ? absint( $_GET['lp_bundle_id'] ) : 0;
 			$defaults   = $this->get_builder_defaults();
+			$variant_created_ids = isset( $_GET['lp_bundle_variant_ids'] ) ? $this->sanitize_unique_positive_int_array( explode( ',', (string) wp_unslash( $_GET['lp_bundle_variant_ids'] ) ) ) : array();
 			$image_prompt = '';
 			$image_sources = array();
 			if ( $created_id > 0 ) {
@@ -451,6 +453,16 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						<?php echo esc_html__( 'Bundle opprettet.', 'lp-bundle-builder' ); ?>
 						<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $created_id . '&action=edit' ) ); ?>"><?php echo esc_html__( 'Åpne produktet', 'lp-bundle-builder' ); ?></a>
 					</p></div>
+					<?php if ( ! empty( $variant_created_ids ) ) : ?>
+						<div class="notice notice-success inline">
+							<p><?php echo esc_html( sprintf( __( 'Opprettet %d ekstra bundle(r).', 'lp-bundle-builder' ), count( $variant_created_ids ) ) ); ?></p>
+							<ul>
+								<?php foreach ( $variant_created_ids as $variant_created_id ) : ?>
+									<li><a href="<?php echo esc_url( admin_url( 'post.php?post=' . absint( $variant_created_id ) . '&action=edit' ) ); ?>"><?php echo esc_html( get_the_title( $variant_created_id ) ); ?></a></li>
+								<?php endforeach; ?>
+							</ul>
+						</div>
+					<?php endif; ?>
 					<?php if ( '' !== $image_prompt ) : ?>
 						<div class="lp-image-prompt-box">
 							<h2><?php echo esc_html__( 'Image Prompt for ChatGPT', 'lp-bundle-builder' ); ?></h2>
@@ -615,6 +627,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					<div id="lp_parts_overview" class="lp-overview"></div>
 					<div id="lp_parts_container"></div>
 					<p><button type="button" class="button button-secondary" id="lp_add_part"><?php echo esc_html__( 'Legg til del', 'lp-bundle-builder' ); ?></button></p>
+					<div class="lp-variant-groups">
+						<h2><?php echo esc_html__( 'Extra bundles from alternatives', 'lp-bundle-builder' ); ?></h2>
+						<p><?php echo esc_html__( 'Load products from selected products, categories and tags, then mark matching alternatives with the same number. Unmarked lines stay standard in every extra bundle.', 'lp-bundle-builder' ); ?></p>
+						<p class="lp-variant-actions">
+							<button type="button" class="button button-secondary" id="lp_load_variant_candidates"><?php echo esc_html__( 'Load products from tags/options', 'lp-bundle-builder' ); ?></button>
+							<span id="lp_variant_status" class="description"></span>
+						</p>
+						<div id="lp_variant_groups_container"></div>
+					</div>
 					<div class="lp-composite-preview" id="lp_composite_preview_wrap">
 						<p class="lp-composite-preview-actions">
 							<button type="button" class="button button-secondary" id="lp_preview_bundle_image"><?php echo esc_html__( 'Preview product image', 'lp-bundle-builder' ); ?></button>
@@ -697,6 +718,18 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 				.lp-image-prompt-actions { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
 				.lp-image-source-list { list-style: disc; margin-left: 20px; }
+				.lp-variant-groups {
+					background: #fff;
+					border: 1px solid #ccd0d4;
+					padding: 14px;
+					margin: 16px 0;
+				}
+				.lp-variant-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+				.lp-variant-part { margin-top: 14px; }
+				.lp-variant-table { border-collapse: collapse; width: 100%; max-width: 920px; }
+				.lp-variant-table th, .lp-variant-table td { border-bottom: 1px solid #f0f0f1; padding: 7px 8px; text-align: left; vertical-align: middle; }
+				.lp-variant-table input[type="number"] { width: 80px; }
+				.lp-variant-source { color: #646970; font-size: 12px; }
 				.lp-composite-preview { margin: 14px 0 20px; }
 				.lp-composite-preview-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 				.lp-composite-preview-panel {
@@ -725,6 +758,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				const addPartButton = document.getElementById('lp_add_part');
 				const partsOverview = document.getElementById('lp_parts_overview');
 				const partsInput = document.getElementById('lp_parts_json');
+				const loadVariantCandidatesButton = document.getElementById('lp_load_variant_candidates');
+				const variantStatus = document.getElementById('lp_variant_status');
+				const variantGroupsContainer = document.getElementById('lp_variant_groups_container');
 				const imageModeSelect = document.getElementById('lp_bundle_image_mode');
 				const compositeOptionRows = Array.from(document.querySelectorAll('.lp-composite-option-row'));
 				const compositePreviewWrap = document.getElementById('lp_composite_preview_wrap');
@@ -770,7 +806,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 
 				function emptyPart(){
-					return { defaultProduct: null, products: [], categories: [], tags: [], discount: '' };
+					return { defaultProduct: null, products: [], categories: [], tags: [], discount: '', variantCandidates: [], variantGroups: {} };
+				}
+
+				function clearVariantCandidatesForPart(partIndex){
+					if (!parts[partIndex]) {
+						return;
+					}
+					parts[partIndex].variantCandidates = [];
+					parts[partIndex].variantGroups = {};
 				}
 
 				function createField(partIndex, fieldKey, apiType, fieldLabel, isMultiple){
@@ -841,6 +885,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										} else {
 											parts[partIndex][fieldKey] = item;
 										}
+										clearVariantCandidatesForPart(partIndex);
 										input.value = '';
 										results.style.display = 'none';
 										render();
@@ -870,6 +915,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							} else {
 								parts[partIndex][fieldKey] = null;
 							}
+							clearVariantCandidatesForPart(partIndex);
 							render();
 						});
 						pill.appendChild(remove);
@@ -895,6 +941,94 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					partsOverview.appendChild(ul);
 				}
 
+				function setVariantStatus(message){
+					if (variantStatus) {
+						variantStatus.textContent = message || '';
+					}
+				}
+
+				function renderVariantGroups(){
+					if (!variantGroupsContainer) {
+						return;
+					}
+
+					variantGroupsContainer.innerHTML = '';
+					const hasCandidates = parts.some(part => Array.isArray(part.variantCandidates) && part.variantCandidates.length);
+					if (!hasCandidates) {
+						const p = document.createElement('p');
+						p.className = 'description';
+						p.textContent = '<?php echo esc_js( __( 'Load alternatives after selecting products, categories or tags.', 'lp-bundle-builder' ) ); ?>';
+						variantGroupsContainer.appendChild(p);
+						return;
+					}
+
+					parts.forEach(function(part, partIndex){
+						const candidates = Array.isArray(part.variantCandidates) ? part.variantCandidates : [];
+						if (!candidates.length) {
+							return;
+						}
+
+						const section = document.createElement('div');
+						section.className = 'lp-variant-part';
+						const heading = document.createElement('h3');
+						heading.textContent = '<?php echo esc_js( __( 'Del', 'lp-bundle-builder' ) ); ?> ' + (partIndex + 1);
+						section.appendChild(heading);
+
+						const table = document.createElement('table');
+						table.className = 'lp-variant-table';
+						const thead = document.createElement('thead');
+						thead.innerHTML = '<tr><th><?php echo esc_js( __( 'Product', 'lp-bundle-builder' ) ); ?></th><th><?php echo esc_js( __( 'Source', 'lp-bundle-builder' ) ); ?></th><th><?php echo esc_js( __( 'Extra bundle #', 'lp-bundle-builder' ) ); ?></th></tr>';
+						table.appendChild(thead);
+						const tbody = document.createElement('tbody');
+
+						candidates.forEach(function(candidate){
+							const productId = Number(candidate.id || 0);
+							if (!productId) {
+								return;
+							}
+
+							const row = document.createElement('tr');
+							const productCell = document.createElement('td');
+							productCell.textContent = candidate.label || ('#' + productId);
+							const sourceCell = document.createElement('td');
+							sourceCell.className = 'lp-variant-source';
+							sourceCell.textContent = candidate.is_default ? '<?php echo esc_js( __( 'Original default', 'lp-bundle-builder' ) ); ?>' : (candidate.source || '');
+							const groupCell = document.createElement('td');
+
+							const input = document.createElement('input');
+							input.type = 'number';
+							input.min = '1';
+							input.max = '50';
+							input.step = '1';
+							input.placeholder = '-';
+							input.value = candidate.is_default ? '' : String((part.variantGroups || {})[String(productId)] || '');
+							input.disabled = !!candidate.is_default;
+							input.addEventListener('input', function(){
+								const group = Number(input.value || 0);
+								if (!parts[partIndex].variantGroups) {
+									parts[partIndex].variantGroups = {};
+								}
+								if (group > 0) {
+									parts[partIndex].variantGroups[String(productId)] = Math.floor(group);
+								} else {
+									delete parts[partIndex].variantGroups[String(productId)];
+								}
+								partsInput.value = JSON.stringify(serializeParts());
+							});
+
+							groupCell.appendChild(input);
+							row.appendChild(productCell);
+							row.appendChild(sourceCell);
+							row.appendChild(groupCell);
+							tbody.appendChild(row);
+						});
+
+						table.appendChild(tbody);
+						section.appendChild(table);
+						variantGroupsContainer.appendChild(section);
+					});
+				}
+
 				function serializeParts(){
 					return parts.map(function(part){
 						return {
@@ -902,7 +1036,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							products: (part.products || []).map(i => Number(i.id)).filter(Boolean),
 							categories: (part.categories || []).map(i => Number(i.id)).filter(Boolean),
 							tags: (part.tags || []).map(i => Number(i.id)).filter(Boolean),
-							discount: String(part.discount || '').trim()
+							discount: String(part.discount || '').trim(),
+							variant_groups: Object.keys(part.variantGroups || {}).reduce(function(groups, productId){
+								const group = Number(part.variantGroups[productId] || 0);
+								const normalizedProductId = Number(productId || 0);
+								if (normalizedProductId > 0 && group > 0) {
+									groups[String(normalizedProductId)] = group;
+								}
+								return groups;
+							}, {})
 						};
 					});
 				}
@@ -1014,6 +1156,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						partsContainer.appendChild(card);
 					});
 					partsInput.value = JSON.stringify(serializeParts());
+					renderVariantGroups();
 				}
 
 				function syncFixedPriceAmount(){
@@ -1060,6 +1203,75 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						window.setTimeout(function(){
 							copyImagePromptButton.textContent = originalLabel;
 						}, 1800);
+					});
+				}
+
+				if (loadVariantCandidatesButton) {
+					loadVariantCandidatesButton.addEventListener('click', function(){
+						if (!parts.length) {
+							window.alert('<?php echo esc_js( __( 'Legg til minst én del først.', 'lp-bundle-builder' ) ); ?>');
+							return;
+						}
+
+						const invalid = parts.some(part => !part.defaultProduct || !part.defaultProduct.id);
+						if (invalid) {
+							window.alert('<?php echo esc_js( __( 'Hver del må ha et standardprodukt før alternativer kan lastes.', 'lp-bundle-builder' ) ); ?>');
+							return;
+						}
+
+						setVariantStatus('<?php echo esc_js( __( 'Loading products...', 'lp-bundle-builder' ) ); ?>');
+						loadVariantCandidatesButton.disabled = true;
+
+						const params = new URLSearchParams();
+						params.append('action', 'lp_bundle_variant_candidates');
+						params.append('nonce', ajaxNonce);
+						params.append('parts_json', JSON.stringify(serializeParts()));
+
+						fetch(ajaxUrl, {
+							method: 'POST',
+							headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+							body: params.toString()
+						})
+						.then(r => r.json())
+						.then(response => {
+							if (!response || !response.success || !response.data || !Array.isArray(response.data.parts)) {
+								const message = response && response.data && response.data.message ? response.data.message : '<?php echo esc_js( __( 'Could not load alternative products.', 'lp-bundle-builder' ) ); ?>';
+								setVariantStatus(message);
+								return;
+							}
+
+							response.data.parts.forEach(function(partData, index){
+								if (!parts[index]) {
+									return;
+								}
+								const previousGroups = parts[index].variantGroups || {};
+								const candidates = Array.isArray(partData.candidates) ? partData.candidates : [];
+								const candidateIds = candidates.reduce(function(map, candidate){
+									const id = Number(candidate.id || 0);
+									if (id > 0) {
+										map[String(id)] = true;
+									}
+									return map;
+								}, {});
+								parts[index].variantCandidates = candidates;
+								parts[index].variantGroups = Object.keys(previousGroups).reduce(function(groups, productId){
+									if (candidateIds[productId]) {
+										groups[productId] = previousGroups[productId];
+									}
+									return groups;
+								}, {});
+							});
+
+							renderVariantGroups();
+							partsInput.value = JSON.stringify(serializeParts());
+							setVariantStatus('<?php echo esc_js( __( 'Alternative products loaded.', 'lp-bundle-builder' ) ); ?>');
+						})
+						.catch(() => {
+							setVariantStatus('<?php echo esc_js( __( 'Could not load alternative products.', 'lp-bundle-builder' ) ); ?>');
+						})
+						.finally(() => {
+							loadVariantCandidatesButton.disabled = false;
+						});
 					});
 				}
 
@@ -1235,6 +1447,37 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			wp_send_json_success(
 				array(
 					'image_url' => 'data:image/jpeg;base64,' . base64_encode( $image_binary ),
+				)
+			);
+		}
+
+		public function ajax_bundle_variant_candidates() {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_send_json_error( array(), 403 );
+			}
+
+			check_ajax_referer( self::AJAX_NONCE_ACTION, 'nonce' );
+
+			$parts_json = isset( $_POST['parts_json'] ) ? wp_unslash( $_POST['parts_json'] ) : '';
+			$parts_raw  = json_decode( $parts_json, true );
+			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
+				wp_send_json_error(
+					array(
+						'message' => __( 'Legg til minst én del først.', 'lp-bundle-builder' ),
+					)
+				);
+			}
+
+			$response_parts = array();
+			foreach ( $parts_raw as $part_raw ) {
+				$response_parts[] = array(
+					'candidates' => $this->build_variant_candidates_from_part( is_array( $part_raw ) ? $part_raw : array() ),
+				);
+			}
+
+			wp_send_json_success(
+				array(
+					'parts' => $response_parts,
 				)
 			);
 		}
@@ -1486,6 +1729,108 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return false;
 		}
 
+		private function build_variant_candidates_from_part( $part ) {
+			$candidates = array();
+			$default_id = isset( $part['default_product'] ) ? absint( $part['default_product'] ) : 0;
+
+			if ( $default_id > 0 ) {
+				$this->add_variant_candidate( $candidates, $default_id, __( 'Original default', 'lp-bundle-builder' ), true );
+			}
+
+			foreach ( $this->sanitize_unique_positive_int_array( isset( $part['products'] ) ? $part['products'] : array() ) as $product_id ) {
+				$this->add_variant_candidate( $candidates, $product_id, __( 'Selected product', 'lp-bundle-builder' ), false );
+			}
+
+			$category_ids = $this->sanitize_unique_positive_int_array( isset( $part['categories'] ) ? $part['categories'] : array() );
+			foreach ( $this->get_product_ids_for_taxonomy_terms( 'product_cat', $category_ids ) as $product_id ) {
+				$this->add_variant_candidate( $candidates, $product_id, $this->build_term_source_label( 'product_cat', $category_ids ), false );
+			}
+
+			$tag_ids = $this->sanitize_unique_positive_int_array( isset( $part['tags'] ) ? $part['tags'] : array() );
+			foreach ( $this->get_product_ids_for_taxonomy_terms( 'product_tag', $tag_ids ) as $product_id ) {
+				$this->add_variant_candidate( $candidates, $product_id, $this->build_term_source_label( 'product_tag', $tag_ids ), false );
+			}
+
+			return array_values( $candidates );
+		}
+
+		private function add_variant_candidate( &$candidates, $product_id, $source, $is_default = false ) {
+			$product_id = absint( $product_id );
+			if ( $product_id <= 0 ) {
+				return;
+			}
+
+			$product = wc_get_product( $product_id );
+			if ( ! $this->is_searchable_bundle_product( $product ) ) {
+				return;
+			}
+
+			if ( isset( $candidates[ $product_id ] ) ) {
+				if ( ! empty( $is_default ) ) {
+					$candidates[ $product_id ]['is_default'] = true;
+					$candidates[ $product_id ]['source']     = __( 'Original default', 'lp-bundle-builder' );
+				} elseif ( empty( $candidates[ $product_id ]['is_default'] ) && false === strpos( (string) $candidates[ $product_id ]['source'], (string) $source ) ) {
+					$candidates[ $product_id ]['source'] .= ', ' . (string) $source;
+				}
+				return;
+			}
+
+			$candidates[ $product_id ] = array(
+				'id'         => (int) $product_id,
+				'label'      => $this->build_fallback_product_label( $product ),
+				'source'     => (string) $source,
+				'is_default' => (bool) $is_default,
+			);
+		}
+
+		private function get_product_ids_for_taxonomy_terms( $taxonomy, $term_ids ) {
+			$term_ids = $this->sanitize_unique_positive_int_array( $term_ids );
+			if ( empty( $term_ids ) ) {
+				return array();
+			}
+
+			$query = new \WP_Query(
+				array(
+					'post_type'      => 'product',
+					'post_status'    => array( 'publish', 'private' ),
+					'posts_per_page' => 200,
+					'fields'         => 'ids',
+					'orderby'        => 'title',
+					'order'          => 'ASC',
+					'no_found_rows'  => true,
+					'tax_query'      => array(
+						array(
+							'taxonomy' => (string) $taxonomy,
+							'field'    => 'term_id',
+							'terms'    => $term_ids,
+							'operator' => 'IN',
+						),
+					),
+				)
+			);
+
+			return ! empty( $query->posts ) && is_array( $query->posts ) ? $this->sanitize_unique_positive_int_array( $query->posts ) : array();
+		}
+
+		private function build_term_source_label( $taxonomy, $term_ids ) {
+			$term_ids = $this->sanitize_unique_positive_int_array( $term_ids );
+			$names    = array();
+
+			foreach ( $term_ids as $term_id ) {
+				$term = get_term( $term_id, $taxonomy );
+				if ( $term instanceof \WP_Term ) {
+					$names[] = (string) $term->name;
+				}
+			}
+
+			if ( empty( $names ) ) {
+				return ( 'product_cat' === $taxonomy ) ? __( 'Category', 'lp-bundle-builder' ) : __( 'Tag', 'lp-bundle-builder' );
+			}
+
+			$prefix = ( 'product_cat' === $taxonomy ) ? __( 'Category', 'lp-bundle-builder' ) : __( 'Tag', 'lp-bundle-builder' );
+			return $prefix . ': ' . implode( ', ', $names );
+		}
+
 		private function normalize_item_type( $type ) {
 			$map = array(
 				'products'        => 'products',
@@ -1698,6 +2043,27 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_prompt', $image_prompt );
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_sources', wp_json_encode( $image_sources ) );
 
+			$variant_created_ids = $this->create_variant_bundles_from_marked_parts(
+				$parts_raw,
+				array(
+					'title'                    => $title,
+					'status'                   => $status,
+					'fixed_price'              => $fixed_price,
+					'fixed_price_amount_raw'   => $fixed_price_amount_raw,
+					'fixed_price_amount'       => $fixed_price_amount,
+					'sync_stock_quantity'      => $sync_stock_quantity,
+					'bundle_button_label'      => $bundle_button_label,
+					'manage_stock'             => $manage_stock,
+					'stock_status'             => $stock_status,
+					'tax_status'               => $tax_status,
+					'bundle_image_mode'        => $bundle_image_mode,
+					'bundle_composite_options' => $bundle_composite_options,
+				)
+			);
+			if ( ! empty( $variant_created_ids ) ) {
+				update_post_meta( $bundle_post_id, '_lp_bundle_variant_ids', wp_json_encode( $variant_created_ids ) );
+			}
+
 			clean_post_cache( $bundle_post_id );
 
 			$redirect_url = add_query_arg(
@@ -1706,12 +2072,290 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					'page'              => self::MENU_SLUG,
 					'lp_bundle_created' => 1,
 					'lp_bundle_id'      => $bundle_post_id,
+					'lp_bundle_variant_ids' => implode( ',', $variant_created_ids ),
 				),
 				admin_url( 'edit.php' )
 			);
 
 			wp_safe_redirect( $redirect_url );
 			exit;
+		}
+
+		private function build_variant_bundle_part_configs( $parts_raw ) {
+			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
+				return array();
+			}
+
+			$group_ids = array();
+			foreach ( $parts_raw as $part_raw ) {
+				$variant_groups = $this->sanitize_variant_groups_from_part( is_array( $part_raw ) ? $part_raw : array() );
+				foreach ( $variant_groups as $group_id ) {
+					$group_ids[] = (int) $group_id;
+				}
+			}
+			$group_ids = array_values( array_unique( array_filter( $group_ids ) ) );
+			sort( $group_ids, SORT_NUMERIC );
+
+			if ( empty( $group_ids ) ) {
+				return array();
+			}
+
+			$configs = array();
+			foreach ( $group_ids as $group_id ) {
+				$variant_parts = array();
+				$title_product_names = array();
+
+				foreach ( $parts_raw as $part_raw ) {
+					$part_raw = is_array( $part_raw ) ? $part_raw : array();
+					$variant_part = $part_raw;
+					$variant_groups = $this->sanitize_variant_groups_from_part( $part_raw );
+					$original_default_id = isset( $part_raw['default_product'] ) ? absint( $part_raw['default_product'] ) : 0;
+					$replacement_ids = array();
+
+					foreach ( $variant_groups as $product_id => $assigned_group_id ) {
+						if ( (int) $assigned_group_id === (int) $group_id ) {
+							$replacement_ids[] = (int) $product_id;
+						}
+					}
+
+					$replacement_ids = $this->sanitize_unique_positive_int_array( $replacement_ids );
+					if ( ! empty( $replacement_ids ) ) {
+						$replacement_id = (int) $replacement_ids[0];
+						$variant_part['default_product'] = $replacement_id;
+						$variant_part['products'] = $this->sanitize_unique_positive_int_array(
+							array_merge(
+								isset( $variant_part['products'] ) ? (array) $variant_part['products'] : array(),
+								array_filter( array( $original_default_id, $replacement_id ) )
+							)
+						);
+
+						$product = wc_get_product( $replacement_id );
+						if ( $product && is_a( $product, 'WC_Product' ) ) {
+							$title_product_names[] = trim( (string) $product->get_name() );
+						}
+					}
+
+					unset( $variant_part['variant_groups'] );
+					$variant_parts[] = $variant_part;
+				}
+
+				$title_product_names = array_values(
+					array_unique(
+						array_filter(
+							$title_product_names,
+							function( $name ) {
+								return '' !== trim( (string) $name );
+							}
+						)
+					)
+				);
+
+				$configs[] = array(
+					'group_id'      => (int) $group_id,
+					'title_suffix'  => ! empty( $title_product_names ) ? implode( ' + ', $title_product_names ) : sprintf( __( 'Variant %d', 'lp-bundle-builder' ), (int) $group_id ),
+					'parts'         => $variant_parts,
+				);
+			}
+
+			return $configs;
+		}
+
+		private function sanitize_variant_groups_from_part( $part ) {
+			$groups = array();
+			if ( empty( $part['variant_groups'] ) || ! is_array( $part['variant_groups'] ) ) {
+				return $groups;
+			}
+
+			foreach ( $part['variant_groups'] as $product_id => $group_id ) {
+				$product_id = absint( $product_id );
+				$group_id   = absint( $group_id );
+				if ( $product_id <= 0 || $group_id <= 0 || $group_id > 50 ) {
+					continue;
+				}
+				$groups[ $product_id ] = $group_id;
+			}
+
+			return $groups;
+		}
+
+		private function create_variant_bundles_from_marked_parts( $parts_raw, $settings ) {
+			$variant_configs = $this->build_variant_bundle_part_configs( $parts_raw );
+			if ( empty( $variant_configs ) ) {
+				return array();
+			}
+
+			$created_ids = array();
+			foreach ( $variant_configs as $variant_config ) {
+				$variant_parts_raw = isset( $variant_config['parts'] ) && is_array( $variant_config['parts'] ) ? $variant_config['parts'] : array();
+				if ( empty( $variant_parts_raw ) ) {
+					continue;
+				}
+
+				$items = array();
+				foreach ( $variant_parts_raw as $part_raw ) {
+					$sanitized_item = $this->build_bundle_item_from_part( is_array( $part_raw ) ? $part_raw : array() );
+					if ( empty( $sanitized_item['product'] ) ) {
+						$items = array();
+						break;
+					}
+					$items[] = $sanitized_item;
+				}
+
+				if ( empty( $items ) ) {
+					continue;
+				}
+
+				$title = isset( $settings['title'] ) ? (string) $settings['title'] : '';
+				$suffix = isset( $variant_config['title_suffix'] ) ? trim( (string) $variant_config['title_suffix'] ) : '';
+				if ( '' !== $suffix ) {
+					$title .= ' - ' . $suffix;
+				}
+
+				$created_id = $this->create_bundle_from_sanitized_items( $title, $items, $settings );
+				if ( $created_id > 0 ) {
+					$created_ids[] = $created_id;
+				}
+			}
+
+			return $this->sanitize_unique_positive_int_array( $created_ids );
+		}
+
+		private function create_bundle_from_sanitized_items( $title, $items, $settings ) {
+			$status = isset( $settings['status'] ) ? sanitize_key( $settings['status'] ) : 'draft';
+			$status = in_array( $status, array( 'draft', 'publish' ), true ) ? $status : 'draft';
+
+			$bundle = $this->create_bundle_product_object( $title, $status );
+			if ( is_wp_error( $bundle ) ) {
+				return 0;
+			}
+			$bundle_post_id = $bundle->get_id();
+
+			$default_data = $this->build_default_products_data( $items );
+			if ( empty( $default_data['is_valid'] ) || '' === $default_data['default_products_json'] ) {
+				wp_delete_post( $bundle_post_id, true );
+				return 0;
+			}
+
+			$fixed_price            = isset( $settings['fixed_price'] ) && 'true' === $settings['fixed_price'] ? 'true' : 'false';
+			$fixed_price_amount_raw = isset( $settings['fixed_price_amount_raw'] ) ? (string) $settings['fixed_price_amount_raw'] : '';
+			$fixed_price_amount     = isset( $settings['fixed_price_amount'] ) ? (string) $settings['fixed_price_amount'] : '';
+			$default_products_total = isset( $default_data['default_products_total'] ) ? (float) $default_data['default_products_total'] : 0.0;
+			$default_products_total = (float) wc_format_decimal( $default_products_total, wc_get_price_decimals() );
+
+			if ( 'true' === $fixed_price ) {
+				if ( '' === $fixed_price_amount_raw || '' === $fixed_price_amount || (float) $fixed_price_amount <= 0 || (float) $fixed_price_amount > $default_products_total ) {
+					wp_delete_post( $bundle_post_id, true );
+					return 0;
+				}
+			} else {
+				$fixed_price_amount = '';
+			}
+
+			$props = array(
+				'individual_theme'         => 'false',
+				'theme'                    => 'grid_1',
+				'theme_size'               => 'medium',
+				'fixed_price'              => $fixed_price,
+				'include_parent_price'     => 'false',
+				'shipping_fee_calculation' => 'bundle',
+				'min_items_quantity'       => '',
+				'max_items_quantity'       => '',
+				'custom_display_price'     => '',
+				'bundle_title'             => '',
+				'bundle_description'       => '',
+				'hide_items_price'         => 'no',
+				'items'                    => $items,
+				'default_products'         => $default_data['default_products_json'],
+				'loop_add_to_cart'         => $default_data['loop_add_to_cart'],
+				'sync_stock_quantity'      => isset( $settings['sync_stock_quantity'] ) && 'true' === $settings['sync_stock_quantity'] ? 'true' : 'false',
+				'bundle_button_label'      => isset( $settings['bundle_button_label'] ) ? (string) $settings['bundle_button_label'] : '',
+			);
+
+			$errors = $bundle->set_props( $props );
+			if ( is_wp_error( $errors ) ) {
+				wp_delete_post( $bundle_post_id, true );
+				return 0;
+			}
+
+			$manage_stock = isset( $settings['manage_stock'] ) && 'yes' === $settings['manage_stock'] ? 'yes' : 'no';
+			$stock_status = isset( $settings['stock_status'] ) ? sanitize_key( $settings['stock_status'] ) : 'instock';
+			$stock_status = in_array( $stock_status, array( 'instock', 'outofstock', 'onbackorder' ), true ) ? $stock_status : 'instock';
+			$tax_status   = isset( $settings['tax_status'] ) ? sanitize_key( $settings['tax_status'] ) : 'taxable';
+			$tax_status   = in_array( $tax_status, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status : 'taxable';
+
+			$bundle->set_manage_stock( 'yes' === $manage_stock );
+			$bundle->set_stock_status( $stock_status );
+			$bundle->set_tax_status( $tax_status );
+			$bundle->set_regular_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
+			if ( 'true' === $fixed_price ) {
+				$bundle->set_sale_price( wc_format_decimal( $fixed_price_amount, wc_get_price_decimals() ) );
+				$bundle->set_price( wc_format_decimal( $fixed_price_amount, wc_get_price_decimals() ) );
+			} else {
+				$bundle->set_sale_price( '' );
+				$bundle->set_price( wc_format_decimal( $default_products_total, wc_get_price_decimals() ) );
+			}
+
+			$this->set_bundle_sku_safely( $bundle, (string) $default_data['generated_sku'], $bundle_post_id );
+			$combined_description = $this->build_bundle_combined_description( $default_data['rows'] );
+			if ( '' !== $combined_description ) {
+				$bundle->set_description( $combined_description );
+			}
+
+			$intro_sentence = $this->build_bundle_intro_sentence( $default_data['rows'] );
+			if ( '' !== $intro_sentence ) {
+				$bundle->set_short_description( wp_kses_post( '<p>' . esc_html( $intro_sentence ) . '</p>' ) );
+			}
+
+			$bundle_image_mode        = isset( $settings['bundle_image_mode'] ) ? $this->sanitize_bundle_image_mode( $settings['bundle_image_mode'] ) : 'ai_prompt';
+			$bundle_composite_options = isset( $settings['bundle_composite_options'] ) ? $this->sanitize_bundle_composite_options( $settings['bundle_composite_options'] ) : $this->sanitize_bundle_composite_options( array() );
+			$bundle_media_data        = $this->get_bundle_media_data( $default_data['rows'] );
+			$fallback_featured_image_id = isset( $bundle_media_data['fallback_featured_image_id'] ) ? absint( $bundle_media_data['fallback_featured_image_id'] ) : 0;
+			$all_source_image_ids       = isset( $bundle_media_data['all_source_image_ids'] ) ? $this->sanitize_unique_positive_int_array( $bundle_media_data['all_source_image_ids'] ) : array();
+			$featured_image_id          = $fallback_featured_image_id;
+
+			if ( 'local_composite' === $bundle_image_mode ) {
+				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $title, $bundle_composite_options );
+				if ( $composite_image_id > 0 ) {
+					$featured_image_id = $composite_image_id;
+				}
+			}
+
+			if ( $featured_image_id > 0 && (int) $bundle->get_image_id() <= 0 ) {
+				$bundle->set_image_id( $featured_image_id );
+			}
+			$bundle->set_gallery_image_ids( $all_source_image_ids );
+
+			$model = \AsanaPlugins\WooCommerce\ProductBundles\get_plugin()->container()->get(
+				\AsanaPlugins\WooCommerce\ProductBundles\Models\SimpleBundleItemsModel::class
+			);
+			$model->delete_bundle( $bundle_post_id );
+
+			foreach ( $default_data['rows'] as $default_product ) {
+				$model->add(
+					array(
+						'bundle_id'  => $bundle_post_id,
+						'product_id' => (int) $default_product['id'],
+						'quantity'   => (int) $default_product['qty'],
+					)
+				);
+			}
+
+			do_action( 'asnp_wepb_admin_process_product_object', $bundle );
+
+			$bundle = \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle::sync( $bundle, false );
+			$bundle->save();
+			$image_sources = $this->get_bundle_image_source_data( $default_data['rows'] );
+			$image_prompt  = '';
+			if ( 'ai_prompt' === $bundle_image_mode ) {
+				$image_prompt = $this->build_bundle_image_prompt( $bundle, $image_sources );
+			}
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_mode', $bundle_image_mode );
+			update_post_meta( $bundle_post_id, '_lp_bundle_composite_options', wp_json_encode( $bundle_composite_options ) );
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_prompt', $image_prompt );
+			update_post_meta( $bundle_post_id, '_lp_bundle_image_sources', wp_json_encode( $image_sources ) );
+
+			clean_post_cache( $bundle_post_id );
+			return (int) $bundle_post_id;
 		}
 
 		private function build_bundle_item_from_part( $part ) {
