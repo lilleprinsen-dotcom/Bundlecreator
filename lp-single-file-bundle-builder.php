@@ -27,6 +27,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			add_action( 'admin_post_lp_save_easy_bundle_builder_defaults', array( $this, 'handle_save_defaults' ) );
 			add_action( 'wp_ajax_lp_bundle_items_search', array( $this, 'ajax_bundle_items_search' ) );
 			add_action( 'wp_ajax_lp_bundle_items_fetch', array( $this, 'ajax_bundle_items_fetch' ) );
+			add_action( 'wp_ajax_lp_bundle_image_preview', array( $this, 'ajax_bundle_image_preview' ) );
 			add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		}
 
@@ -140,6 +141,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'stock_status'         => 'instock',
 				'tax_status'           => 'taxable',
 				'bundle_image_mode'    => 'ai_prompt',
+				'bundle_composite_layout'     => 'grid',
+				'bundle_composite_spacing'    => 'tight',
+				'bundle_composite_background' => 'warm',
 			);
 		}
 
@@ -164,6 +168,35 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 		private function sanitize_bundle_image_mode( $value ) {
 			$mode = sanitize_key( (string) $value );
 			return in_array( $mode, array( 'ai_prompt', 'local_composite' ), true ) ? $mode : 'ai_prompt';
+		}
+
+		private function sanitize_bundle_composite_layout( $value ) {
+			$layout = sanitize_key( (string) $value );
+			return in_array( $layout, array( 'grid', 'featured', 'row' ), true ) ? $layout : 'grid';
+		}
+
+		private function sanitize_bundle_composite_spacing( $value ) {
+			$spacing = sanitize_key( (string) $value );
+			return in_array( $spacing, array( 'tight', 'balanced', 'airy' ), true ) ? $spacing : 'tight';
+		}
+
+		private function sanitize_bundle_composite_background( $value ) {
+			$background = sanitize_key( (string) $value );
+			return in_array( $background, array( 'warm', 'white', 'gray' ), true ) ? $background : 'warm';
+		}
+
+		private function sanitize_bundle_composite_options( $raw_options ) {
+			$defaults    = $this->defaults_fallback();
+			$raw_options = is_array( $raw_options ) ? $raw_options : array();
+			$layout      = isset( $raw_options['bundle_composite_layout'] ) ? $raw_options['bundle_composite_layout'] : ( isset( $raw_options['layout'] ) ? $raw_options['layout'] : $defaults['bundle_composite_layout'] );
+			$spacing     = isset( $raw_options['bundle_composite_spacing'] ) ? $raw_options['bundle_composite_spacing'] : ( isset( $raw_options['spacing'] ) ? $raw_options['spacing'] : $defaults['bundle_composite_spacing'] );
+			$background  = isset( $raw_options['bundle_composite_background'] ) ? $raw_options['bundle_composite_background'] : ( isset( $raw_options['background'] ) ? $raw_options['background'] : $defaults['bundle_composite_background'] );
+
+			return array(
+				'layout'     => $this->sanitize_bundle_composite_layout( $layout ),
+				'spacing'    => $this->sanitize_bundle_composite_spacing( $spacing ),
+				'background' => $this->sanitize_bundle_composite_background( $background ),
+			);
 		}
 
 		private function sanitize_defaults_option( $raw_defaults ) {
@@ -192,6 +225,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			$fixed_price_amount = isset( $raw_defaults['fixed_price_amount'] ) ? $this->sanitize_decimal_string( $raw_defaults['fixed_price_amount'] ) : $defaults['fixed_price_amount'];
 			$bundle_image_mode = isset( $raw_defaults['bundle_image_mode'] ) ? $this->sanitize_bundle_image_mode( $raw_defaults['bundle_image_mode'] ) : $defaults['bundle_image_mode'];
+			$bundle_composite_options = $this->sanitize_bundle_composite_options( $raw_defaults );
 
 			return array(
 				'product_status'      => $product_status,
@@ -203,6 +237,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'tax_status'          => $tax_status,
 				'fixed_price_amount'  => $fixed_price_amount,
 				'bundle_image_mode'   => $bundle_image_mode,
+				'bundle_composite_layout'     => $bundle_composite_options['layout'],
+				'bundle_composite_spacing'    => $bundle_composite_options['spacing'],
+				'bundle_composite_background' => $bundle_composite_options['background'],
 			);
 		}
 
@@ -228,6 +265,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'stock_status'        => isset( $_POST['stock_status'] ) ? wp_unslash( $_POST['stock_status'] ) : '',
 				'tax_status'          => isset( $_POST['tax_status'] ) ? wp_unslash( $_POST['tax_status'] ) : '',
 				'bundle_image_mode'   => isset( $_POST['bundle_image_mode'] ) ? wp_unslash( $_POST['bundle_image_mode'] ) : '',
+				'bundle_composite_layout'     => isset( $_POST['bundle_composite_layout'] ) ? wp_unslash( $_POST['bundle_composite_layout'] ) : '',
+				'bundle_composite_spacing'    => isset( $_POST['bundle_composite_spacing'] ) ? wp_unslash( $_POST['bundle_composite_spacing'] ) : '',
+				'bundle_composite_background' => isset( $_POST['bundle_composite_background'] ) ? wp_unslash( $_POST['bundle_composite_background'] ) : '',
 			);
 
 			update_option( self::DEFAULTS_OPTION, $this->sanitize_defaults_option( $raw_defaults ) );
@@ -320,6 +360,36 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 									<select id="lp_default_bundle_image_mode" name="bundle_image_mode">
 										<option value="ai_prompt" <?php selected( $defaults['bundle_image_mode'], 'ai_prompt' ); ?>><?php echo esc_html__( 'AI prompt', 'lp-bundle-builder' ); ?></option>
 										<option value="local_composite" <?php selected( $defaults['bundle_image_mode'], 'local_composite' ); ?>><?php echo esc_html__( 'Local composite', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_layout"><?php echo esc_html__( 'Composite layout default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_layout" name="bundle_composite_layout">
+										<option value="grid" <?php selected( $defaults['bundle_composite_layout'], 'grid' ); ?>><?php echo esc_html__( 'Even grid', 'lp-bundle-builder' ); ?></option>
+										<option value="featured" <?php selected( $defaults['bundle_composite_layout'], 'featured' ); ?>><?php echo esc_html__( 'Large first product', 'lp-bundle-builder' ); ?></option>
+										<option value="row" <?php selected( $defaults['bundle_composite_layout'], 'row' ); ?>><?php echo esc_html__( 'Single row', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_spacing"><?php echo esc_html__( 'Composite spacing default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_spacing" name="bundle_composite_spacing">
+										<option value="tight" <?php selected( $defaults['bundle_composite_spacing'], 'tight' ); ?>><?php echo esc_html__( 'Tight', 'lp-bundle-builder' ); ?></option>
+										<option value="balanced" <?php selected( $defaults['bundle_composite_spacing'], 'balanced' ); ?>><?php echo esc_html__( 'Balanced', 'lp-bundle-builder' ); ?></option>
+										<option value="airy" <?php selected( $defaults['bundle_composite_spacing'], 'airy' ); ?>><?php echo esc_html__( 'Airy', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_background"><?php echo esc_html__( 'Composite background default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_background" name="bundle_composite_background">
+										<option value="warm" <?php selected( $defaults['bundle_composite_background'], 'warm' ); ?>><?php echo esc_html__( 'Warm white', 'lp-bundle-builder' ); ?></option>
+										<option value="white" <?php selected( $defaults['bundle_composite_background'], 'white' ); ?>><?php echo esc_html__( 'Pure white', 'lp-bundle-builder' ); ?></option>
+										<option value="gray" <?php selected( $defaults['bundle_composite_background'], 'gray' ); ?>><?php echo esc_html__( 'Light gray', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -450,6 +520,36 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 									</select>
 								</td>
 							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_layout"><?php echo esc_html__( 'Composite layout', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_layout" name="bundle_composite_layout">
+										<option value="grid" <?php selected( $defaults['bundle_composite_layout'], 'grid' ); ?>><?php echo esc_html__( 'Even grid', 'lp-bundle-builder' ); ?></option>
+										<option value="featured" <?php selected( $defaults['bundle_composite_layout'], 'featured' ); ?>><?php echo esc_html__( 'Large first product', 'lp-bundle-builder' ); ?></option>
+										<option value="row" <?php selected( $defaults['bundle_composite_layout'], 'row' ); ?>><?php echo esc_html__( 'Single row', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_spacing"><?php echo esc_html__( 'Composite spacing', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_spacing" name="bundle_composite_spacing">
+										<option value="tight" <?php selected( $defaults['bundle_composite_spacing'], 'tight' ); ?>><?php echo esc_html__( 'Tight', 'lp-bundle-builder' ); ?></option>
+										<option value="balanced" <?php selected( $defaults['bundle_composite_spacing'], 'balanced' ); ?>><?php echo esc_html__( 'Balanced', 'lp-bundle-builder' ); ?></option>
+										<option value="airy" <?php selected( $defaults['bundle_composite_spacing'], 'airy' ); ?>><?php echo esc_html__( 'Airy', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_background"><?php echo esc_html__( 'Composite background', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_background" name="bundle_composite_background">
+										<option value="warm" <?php selected( $defaults['bundle_composite_background'], 'warm' ); ?>><?php echo esc_html__( 'Warm white', 'lp-bundle-builder' ); ?></option>
+										<option value="white" <?php selected( $defaults['bundle_composite_background'], 'white' ); ?>><?php echo esc_html__( 'Pure white', 'lp-bundle-builder' ); ?></option>
+										<option value="gray" <?php selected( $defaults['bundle_composite_background'], 'gray' ); ?>><?php echo esc_html__( 'Light gray', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
 							<tr>
 								<th scope="row"><label for="lp_fixed_price"><?php echo esc_html__( 'Fast pris', 'lp-bundle-builder' ); ?></label></th>
 								<td>
@@ -515,6 +615,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					<div id="lp_parts_overview" class="lp-overview"></div>
 					<div id="lp_parts_container"></div>
 					<p><button type="button" class="button button-secondary" id="lp_add_part"><?php echo esc_html__( 'Legg til del', 'lp-bundle-builder' ); ?></button></p>
+					<div class="lp-composite-preview" id="lp_composite_preview_wrap">
+						<p class="lp-composite-preview-actions">
+							<button type="button" class="button button-secondary" id="lp_preview_bundle_image"><?php echo esc_html__( 'Preview product image', 'lp-bundle-builder' ); ?></button>
+							<span id="lp_preview_bundle_image_status" class="description"></span>
+						</p>
+						<div id="lp_composite_preview_panel" class="lp-composite-preview-panel" hidden>
+							<img id="lp_composite_preview_image" alt="<?php echo esc_attr__( 'Bundle product image preview', 'lp-bundle-builder' ); ?>" />
+						</div>
+					</div>
 
 					<?php submit_button( __( 'Opprett bundle', 'lp-bundle-builder' ) ); ?>
 				</form>
@@ -588,6 +697,20 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 				.lp-image-prompt-actions { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
 				.lp-image-source-list { list-style: disc; margin-left: 20px; }
+				.lp-composite-preview { margin: 14px 0 20px; }
+				.lp-composite-preview-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+				.lp-composite-preview-panel {
+					display: inline-block;
+					max-width: 420px;
+					background: #fff;
+					border: 1px solid #ccd0d4;
+					padding: 8px;
+				}
+				.lp-composite-preview-panel img {
+					display: block;
+					width: 100%;
+					height: auto;
+				}
 			</style>
 
 			<script>
@@ -602,6 +725,13 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				const addPartButton = document.getElementById('lp_add_part');
 				const partsOverview = document.getElementById('lp_parts_overview');
 				const partsInput = document.getElementById('lp_parts_json');
+				const imageModeSelect = document.getElementById('lp_bundle_image_mode');
+				const compositeOptionRows = Array.from(document.querySelectorAll('.lp-composite-option-row'));
+				const compositePreviewWrap = document.getElementById('lp_composite_preview_wrap');
+				const previewImageButton = document.getElementById('lp_preview_bundle_image');
+				const previewImageStatus = document.getElementById('lp_preview_bundle_image_status');
+				const previewImagePanel = document.getElementById('lp_composite_preview_panel');
+				const previewImage = document.getElementById('lp_composite_preview_image');
 				const imagePromptTextarea = document.getElementById('lp-image-prompt-textarea');
 				const copyImagePromptButton = document.getElementById('lp-copy-image-prompt');
 				const selectImagePromptButton = document.getElementById('lp-select-image-prompt');
@@ -777,7 +907,55 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					});
 				}
 
+				function serializeImageOptions(){
+					const layout = document.getElementById('lp_bundle_composite_layout');
+					const spacing = document.getElementById('lp_bundle_composite_spacing');
+					const background = document.getElementById('lp_bundle_composite_background');
+					return {
+						bundle_composite_layout: layout ? layout.value : 'grid',
+						bundle_composite_spacing: spacing ? spacing.value : 'tight',
+						bundle_composite_background: background ? background.value : 'warm'
+					};
+				}
+
+				function syncCompositeControls(){
+					const enabled = !imageModeSelect || imageModeSelect.value === 'local_composite';
+					compositeOptionRows.forEach(function(row){
+						row.style.display = enabled ? '' : 'none';
+					});
+					if (compositePreviewWrap) {
+						compositePreviewWrap.style.display = enabled ? '' : 'none';
+					}
+				}
+
+				function validatePreviewParts(){
+					if (!parts.length) {
+						return '<?php echo esc_js( __( 'Legg til minst én del før du forhåndsviser bildet.', 'lp-bundle-builder' ) ); ?>';
+					}
+					if (parts.some(part => !part.defaultProduct || !part.defaultProduct.id)) {
+						return '<?php echo esc_js( __( 'Hver del må ha et standardprodukt før bildet kan forhåndsvises.', 'lp-bundle-builder' ) ); ?>';
+					}
+					return '';
+				}
+
+				function setPreviewStatus(message){
+					if (previewImageStatus) {
+						previewImageStatus.textContent = message || '';
+					}
+				}
+
+				function clearPreview(){
+					if (previewImage) {
+						previewImage.removeAttribute('src');
+					}
+					if (previewImagePanel) {
+						previewImagePanel.hidden = true;
+					}
+				}
+
 				function render(){
+					clearPreview();
+					setPreviewStatus('');
 					partsContainer.innerHTML = '';
 					renderOverview();
 					parts.forEach(function(part, index){
@@ -852,6 +1030,21 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 				syncFixedPriceAmount();
 
+				if (imageModeSelect) {
+					imageModeSelect.addEventListener('change', function(){
+						syncCompositeControls();
+						clearPreview();
+						setPreviewStatus('');
+					});
+				}
+				document.querySelectorAll('#lp_bundle_composite_layout, #lp_bundle_composite_spacing, #lp_bundle_composite_background').forEach(function(control){
+					control.addEventListener('change', function(){
+						clearPreview();
+						setPreviewStatus('');
+					});
+				});
+				syncCompositeControls();
+
 				if (selectImagePromptButton && imagePromptTextarea) {
 					selectImagePromptButton.addEventListener('click', function(){
 						imagePromptTextarea.focus();
@@ -867,6 +1060,52 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						window.setTimeout(function(){
 							copyImagePromptButton.textContent = originalLabel;
 						}, 1800);
+					});
+				}
+
+				if (previewImageButton) {
+					previewImageButton.addEventListener('click', function(){
+						const validationMessage = validatePreviewParts();
+						if (validationMessage) {
+							window.alert(validationMessage);
+							return;
+						}
+
+						clearPreview();
+						setPreviewStatus('<?php echo esc_js( __( 'Generating preview...', 'lp-bundle-builder' ) ); ?>');
+						previewImageButton.disabled = true;
+
+						const params = new URLSearchParams();
+						params.append('action', 'lp_bundle_image_preview');
+						params.append('nonce', ajaxNonce);
+						params.append('parts_json', JSON.stringify(serializeParts()));
+						const options = serializeImageOptions();
+						Object.keys(options).forEach(function(key){
+							params.append(key, options[key]);
+						});
+
+						fetch(ajaxUrl, {
+							method: 'POST',
+							headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+							body: params.toString()
+						})
+						.then(r => r.json())
+						.then(response => {
+							if (!response || !response.success || !response.data || !response.data.image_url) {
+								const message = response && response.data && response.data.message ? response.data.message : '<?php echo esc_js( __( 'Could not generate preview.', 'lp-bundle-builder' ) ); ?>';
+								setPreviewStatus(message);
+								return;
+							}
+							previewImage.src = response.data.image_url;
+							previewImagePanel.hidden = false;
+							setPreviewStatus('<?php echo esc_js( __( 'Preview ready.', 'lp-bundle-builder' ) ); ?>');
+						})
+						.catch(() => {
+							setPreviewStatus('<?php echo esc_js( __( 'Could not generate preview.', 'lp-bundle-builder' ) ); ?>');
+						})
+						.finally(() => {
+							previewImageButton.disabled = false;
+						});
 					});
 				}
 
@@ -932,6 +1171,72 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			wp_send_json_success( $this->get_items_with_fallback( $type, '', $items, 'fetch' ) );
+		}
+
+		public function ajax_bundle_image_preview() {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_send_json_error( array(), 403 );
+			}
+
+			check_ajax_referer( self::AJAX_NONCE_ACTION, 'nonce' );
+
+			if ( ! class_exists( 'Imagick' ) || ! class_exists( 'ImagickPixel' ) ) {
+				wp_send_json_error(
+					array(
+						'message' => __( 'Imagick er ikke tilgjengelig på serveren.', 'lp-bundle-builder' ),
+					)
+				);
+			}
+
+			$parts_json = isset( $_POST['parts_json'] ) ? wp_unslash( $_POST['parts_json'] ) : '';
+			$parts_raw  = json_decode( $parts_json, true );
+			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
+				wp_send_json_error(
+					array(
+						'message' => __( 'Legg til minst én del før du forhåndsviser bildet.', 'lp-bundle-builder' ),
+					)
+				);
+			}
+
+			$items = array();
+			foreach ( $parts_raw as $part_raw ) {
+				$sanitized_item = $this->build_bundle_item_from_part( is_array( $part_raw ) ? $part_raw : array() );
+				if ( empty( $sanitized_item['product'] ) ) {
+					wp_send_json_error(
+						array(
+							'message' => __( 'Hver del må ha et gyldig standardprodukt.', 'lp-bundle-builder' ),
+						)
+					);
+				}
+				$items[] = $sanitized_item;
+			}
+
+			$default_data = $this->build_default_products_data( $items );
+			if ( empty( $default_data['is_valid'] ) || empty( $default_data['rows'] ) ) {
+				wp_send_json_error(
+					array(
+						'message' => ! empty( $default_data['error'] ) ? $default_data['error'] : __( 'Kunne ikke hente produktbilder for forhåndsvisning.', 'lp-bundle-builder' ),
+					)
+				);
+			}
+
+			$image_binary = $this->build_bundle_composite_image_binary(
+				$default_data['rows'],
+				$this->sanitize_bundle_composite_options( wp_unslash( $_POST ) )
+			);
+			if ( '' === $image_binary ) {
+				wp_send_json_error(
+					array(
+						'message' => __( 'Kunne ikke generere forhåndsvisning fra produktbildene.', 'lp-bundle-builder' ),
+					)
+				);
+			}
+
+			wp_send_json_success(
+				array(
+					'image_url' => 'data:image/jpeg;base64,' . base64_encode( $image_binary ),
+				)
+			);
 		}
 
 		private function get_items_with_fallback( $type, $search, $items, $mode ) {
@@ -1230,6 +1535,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$tax_status     = in_array( $tax_status_raw, array( 'taxable', 'shipping', 'none' ), true ) ? $tax_status_raw : $defaults['tax_status'];
 			$bundle_image_mode_raw = isset( $_POST['bundle_image_mode'] ) ? wp_unslash( $_POST['bundle_image_mode'] ) : $defaults['bundle_image_mode'];
 			$bundle_image_mode = $this->sanitize_bundle_image_mode( $bundle_image_mode_raw );
+			$bundle_composite_options = $this->sanitize_bundle_composite_options( wp_unslash( $_POST ) );
 
 			if ( '' === $title ) {
 				$title = sprintf( __( 'Nytt bundle %s', 'lp-bundle-builder' ), current_time( 'Y-m-d H:i' ) );
@@ -1352,7 +1658,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$featured_image_id = $fallback_featured_image_id;
 
 			if ( 'local_composite' === $bundle_image_mode ) {
-				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $title );
+				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $title, $bundle_composite_options );
 				if ( $composite_image_id > 0 ) {
 					$featured_image_id = $composite_image_id;
 				}
@@ -1388,6 +1694,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$image_prompt = $this->build_bundle_image_prompt( $bundle, $image_sources );
 			}
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_mode', $bundle_image_mode );
+			update_post_meta( $bundle_post_id, '_lp_bundle_composite_options', wp_json_encode( $bundle_composite_options ) );
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_prompt', $image_prompt );
 			update_post_meta( $bundle_post_id, '_lp_bundle_image_sources', wp_json_encode( $image_sources ) );
 
@@ -1706,11 +2013,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return (int) $media_ids[0];
 		}
 
-		private function generate_bundle_composite_image( $bundle_post_id, $default_products_rows, $bundle_name = '' ) {
-			if ( ! class_exists( 'Imagick' ) || ! class_exists( 'ImagickPixel' ) ) {
-				return 0;
-			}
-
+		private function get_bundle_composite_source_image_paths( $default_products_rows ) {
 			$source_image_paths = array();
 			foreach ( (array) $default_products_rows as $row ) {
 				$product_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
@@ -1736,20 +2039,77 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$source_image_paths[] = (string) $file_path;
 			}
 
-			if ( empty( $source_image_paths ) ) {
-				return 0;
+			return array_values( array_unique( $source_image_paths ) );
+		}
+
+		private function get_bundle_composite_palette( $background ) {
+			$background = $this->sanitize_bundle_composite_background( $background );
+
+			if ( 'white' === $background ) {
+				return array(
+					'canvas' => '#ffffff',
+					'box'    => '#ffffff',
+				);
 			}
 
-			$source_image_paths = array_values( array_unique( $source_image_paths ) );
+			if ( 'gray' === $background ) {
+				return array(
+					'canvas' => '#f1f2f3',
+					'box'    => '#ffffff',
+				);
+			}
+
+			return array(
+				'canvas' => '#f7f7f4',
+				'box'    => '#ffffff',
+			);
+		}
+
+		private function get_bundle_composite_spacing_values( $spacing, $canvas_size ) {
+			$spacing     = $this->sanitize_bundle_composite_spacing( $spacing );
+			$canvas_size = max( 600, (int) $canvas_size );
+
+			if ( 'airy' === $spacing ) {
+				return array(
+					'outer_pad' => (int) round( $canvas_size * 0.055 ),
+					'gap'       => (int) round( $canvas_size * 0.03 ),
+				);
+			}
+
+			if ( 'balanced' === $spacing ) {
+				return array(
+					'outer_pad' => (int) round( $canvas_size * 0.045 ),
+					'gap'       => (int) round( $canvas_size * 0.02 ),
+				);
+			}
+
+			return array(
+				'outer_pad' => (int) round( $canvas_size * 0.035 ),
+				'gap'       => (int) round( $canvas_size * 0.012 ),
+			);
+		}
+
+		private function build_bundle_composite_image_binary( $default_products_rows, $options = array() ) {
+			if ( ! class_exists( 'Imagick' ) || ! class_exists( 'ImagickPixel' ) ) {
+				return '';
+			}
+
+			$options            = $this->sanitize_bundle_composite_options( (array) $options );
+			$source_image_paths = $this->get_bundle_composite_source_image_paths( $default_products_rows );
+			if ( empty( $source_image_paths ) ) {
+				return '';
+			}
+
 			$canvas_size = 1600;
-			$slots = $this->get_bundle_composite_slots( count( $source_image_paths ), $canvas_size );
+			$slots       = $this->get_bundle_composite_slots( count( $source_image_paths ), $canvas_size, $options );
 			if ( empty( $slots ) ) {
-				return 0;
+				return '';
 			}
 
 			try {
+				$palette = $this->get_bundle_composite_palette( $options['background'] );
 				$canvas = new \Imagick();
-				$canvas->newImage( $canvas_size, $canvas_size, new \ImagickPixel( '#f9f9f7' ) );
+				$canvas->newImage( $canvas_size, $canvas_size, new \ImagickPixel( $palette['canvas'] ) );
 				$canvas->setImageFormat( 'jpeg' );
 				$canvas->setImageColorspace( \Imagick::COLORSPACE_SRGB );
 
@@ -1757,6 +2117,13 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					if ( ! isset( $source_image_paths[ $index ] ) ) {
 						continue;
 					}
+
+					$box = new \Imagick();
+					$box->newImage( (int) $slot['w'], (int) $slot['h'], new \ImagickPixel( $palette['box'] ) );
+					$box->setImageFormat( 'png' );
+					$canvas->compositeImage( $box, \Imagick::COMPOSITE_OVER, (int) $slot['x'], (int) $slot['y'] );
+					$box->clear();
+					$box->destroy();
 
 					$image = new \Imagick();
 					$image->readImage( $source_image_paths[ $index ] );
@@ -1777,10 +2144,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$canvas->clear();
 				$canvas->destroy();
 			} catch ( \Exception $exception ) {
-				return 0;
+				return '';
 			}
 
-			if ( '' === (string) $image_binary ) {
+			return is_string( $image_binary ) ? $image_binary : '';
+		}
+
+		private function generate_bundle_composite_image( $bundle_post_id, $default_products_rows, $bundle_name = '', $options = array() ) {
+			$image_binary = $this->build_bundle_composite_image_binary( $default_products_rows, $options );
+			if ( '' === $image_binary ) {
 				return 0;
 			}
 
@@ -1824,40 +2196,76 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return (int) $attachment_id;
 		}
 
-		private function get_bundle_composite_slots( $count, $canvas_size ) {
+		private function get_bundle_composite_slots( $count, $canvas_size, $options = array() ) {
 			$count = max( 1, min( 4, (int) $count ) );
 			$canvas_size = max( 600, (int) $canvas_size );
-			$pad = (int) round( $canvas_size * 0.06 );
+			$options = $this->sanitize_bundle_composite_options( (array) $options );
+			$spacing = $this->get_bundle_composite_spacing_values( $options['spacing'], $canvas_size );
+			$pad = (int) $spacing['outer_pad'];
+			$gap = (int) $spacing['gap'];
 			$inner = $canvas_size - ( $pad * 2 );
 
 			if ( 1 === $count ) {
 				return array( array( 'x' => $pad, 'y' => $pad, 'w' => $inner, 'h' => $inner ) );
 			}
 
+			if ( 'row' === $options['layout'] ) {
+				$cell_w = (int) floor( ( $inner - ( $gap * ( $count - 1 ) ) ) / $count );
+				$slots  = array();
+				for ( $index = 0; $index < $count; $index++ ) {
+					$slots[] = array(
+						'x' => $pad + ( $index * ( $cell_w + $gap ) ),
+						'y' => $pad,
+						'w' => $cell_w,
+						'h' => $inner,
+					);
+				}
+				return $slots;
+			}
+
+			if ( 'featured' === $options['layout'] && $count > 1 ) {
+				$featured_w = (int) floor( $inner * 0.62 );
+				$side_w     = $inner - $featured_w - $gap;
+				$side_count = $count - 1;
+				$side_h     = (int) floor( ( $inner - ( $gap * ( $side_count - 1 ) ) ) / $side_count );
+				$slots      = array(
+					array( 'x' => $pad, 'y' => $pad, 'w' => $featured_w, 'h' => $inner ),
+				);
+				for ( $index = 0; $index < $side_count; $index++ ) {
+					$slots[] = array(
+						'x' => $pad + $featured_w + $gap,
+						'y' => $pad + ( $index * ( $side_h + $gap ) ),
+						'w' => $side_w,
+						'h' => $side_h,
+					);
+				}
+				return $slots;
+			}
+
 			if ( 2 === $count ) {
-				$w = (int) floor( ( $inner - $pad ) / 2 );
+				$w = (int) floor( ( $inner - $gap ) / 2 );
 				return array(
 					array( 'x' => $pad, 'y' => $pad, 'w' => $w, 'h' => $inner ),
-					array( 'x' => $pad + $w + $pad, 'y' => $pad, 'w' => $w, 'h' => $inner ),
+					array( 'x' => $pad + $w + $gap, 'y' => $pad, 'w' => $w, 'h' => $inner ),
 				);
 			}
 
 			if ( 3 === $count ) {
-				$half_w = (int) floor( ( $inner - $pad ) / 2 );
-				$half_h = (int) floor( ( $inner - $pad ) / 2 );
+				$half_w = (int) floor( ( $inner - $gap ) / 2 );
+				$half_h = (int) floor( ( $inner - $gap ) / 2 );
 				return array(
 					array( 'x' => $pad, 'y' => $pad, 'w' => $half_w, 'h' => $inner ),
-					array( 'x' => $pad + $half_w + $pad, 'y' => $pad, 'w' => $half_w, 'h' => $half_h ),
-					array( 'x' => $pad + $half_w + $pad, 'y' => $pad + $half_h + $pad, 'w' => $half_w, 'h' => $half_h ),
+					array( 'x' => $pad + $half_w + $gap, 'y' => $pad, 'w' => $half_w, 'h' => $half_h ),
+					array( 'x' => $pad + $half_w + $gap, 'y' => $pad + $half_h + $gap, 'w' => $half_w, 'h' => $half_h ),
 				);
 			}
 
-			$cell = (int) floor( ( $inner - $pad ) / 2 );
+			$cell = (int) floor( ( $inner - $gap ) / 2 );
 			return array(
 				array( 'x' => $pad, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad + $cell + $pad, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad, 'y' => $pad + $cell + $pad, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad + $cell + $pad, 'y' => $pad + $cell + $pad, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad + $cell + $gap, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad, 'y' => $pad + $cell + $gap, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad + $cell + $gap, 'y' => $pad + $cell + $gap, 'w' => $cell, 'h' => $cell ),
 			);
 		}
 
