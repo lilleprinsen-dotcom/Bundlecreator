@@ -69,6 +69,66 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				&& class_exists( '\\AsanaPlugins\\WooCommerce\\ProductBundles\\Models\\SimpleBundleItemsModel' );
 		}
 
+		private function create_bundle_product_object( $title, $status ) {
+			try {
+				$bundle = function_exists( 'wc_get_product_object' )
+					? wc_get_product_object( self::PRODUCT_TYPE )
+					: new \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle();
+			} catch ( \Throwable $e ) {
+				return new \WP_Error(
+					'lp_bundle_class_error',
+					sprintf(
+						/* translators: %s: technical error message from WooCommerce or Easy Product Bundles. */
+						__( 'Bundle-produktet kunne ikke opprettes: %s', 'lp-bundle-builder' ),
+						$e->getMessage()
+					)
+				);
+			}
+
+			if ( ! $bundle instanceof \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle || ! method_exists( $bundle, 'set_props' ) ) {
+				return new \WP_Error(
+					'lp_bundle_class_error',
+					sprintf(
+						/* translators: %s: loaded PHP class name. */
+						__( 'WooCommerce returnerte feil bundle-klasse: %s', 'lp-bundle-builder' ),
+						is_object( $bundle ) ? get_class( $bundle ) : gettype( $bundle )
+					)
+				);
+			}
+
+			try {
+				$bundle->set_name( $title );
+				$bundle->set_status( $status );
+				$bundle_post_id = $bundle->save();
+			} catch ( \Throwable $e ) {
+				return new \WP_Error(
+					'lp_bundle_create_error',
+					sprintf(
+						/* translators: %s: technical error message from WooCommerce or Easy Product Bundles. */
+						__( 'Bundle-produktet kunne ikke lagres: %s', 'lp-bundle-builder' ),
+						$e->getMessage()
+					)
+				);
+			}
+
+			if ( ! $bundle_post_id || is_wp_error( $bundle_post_id ) ) {
+				return new \WP_Error( 'lp_bundle_create_error', __( 'Kunne ikke opprette bundle-produktet.', 'lp-bundle-builder' ) );
+			}
+
+			$term_result = wp_set_object_terms( $bundle_post_id, self::PRODUCT_TYPE, 'product_type' );
+			if ( is_wp_error( $term_result ) ) {
+				wp_delete_post( $bundle_post_id, true );
+				return $term_result;
+			}
+
+			clean_post_cache( $bundle_post_id );
+			if ( function_exists( 'wc_delete_product_transients' ) ) {
+				wc_delete_product_transients( $bundle_post_id );
+			}
+
+			return $bundle;
+		}
+
 		private function defaults_fallback() {
 			return array(
 				'product_status'       => 'draft',
@@ -1194,26 +1254,11 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( __( 'Ingen gyldige deler ble sendt inn.', 'lp-bundle-builder' ) );
 			}
 
-			$bundle_post_id = wp_insert_post(
-				array(
-					'post_type'   => 'product',
-					'post_status' => $status,
-					'post_title'  => $title,
-				),
-				true
-			);
-
-			if ( is_wp_error( $bundle_post_id ) || ! $bundle_post_id ) {
-				$this->redirect_with_error( __( 'Kunne ikke opprette bundle-produktet.', 'lp-bundle-builder' ) );
+			$bundle = $this->create_bundle_product_object( $title, $status );
+			if ( is_wp_error( $bundle ) ) {
+				$this->redirect_with_error( $bundle->get_error_message() );
 			}
-
-			wp_set_object_terms( $bundle_post_id, self::PRODUCT_TYPE, 'product_type' );
-
-			$bundle = wc_get_product( $bundle_post_id );
-			if ( ! $bundle instanceof \AsanaPlugins\WooCommerce\ProductBundles\ProductBundle || ! method_exists( $bundle, 'set_props' ) ) {
-				wp_delete_post( $bundle_post_id, true );
-				$this->redirect_with_error( __( 'Bundle-klassen kunne ikke lastes riktig.', 'lp-bundle-builder' ) );
-			}
+			$bundle_post_id = $bundle->get_id();
 
 			$default_data = $this->build_default_products_data( $items );
 			if ( empty( $default_data['is_valid'] ) || '' === $default_data['default_products_json'] ) {
