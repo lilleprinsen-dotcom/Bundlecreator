@@ -2156,6 +2156,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
 				$this->redirect_with_error( __( 'Du må legge til minst én del.', 'lp-bundle-builder' ) );
 			}
+			$primary_title = $this->build_primary_variant_bundle_title( $title, $parts_raw );
 
 			$items = array();
 			foreach ( $parts_raw as $part_raw ) {
@@ -2170,7 +2171,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$this->redirect_with_error( __( 'Ingen gyldige deler ble sendt inn.', 'lp-bundle-builder' ) );
 			}
 
-			$bundle = $this->create_bundle_product_object( $title, $status );
+			$bundle = $this->create_bundle_product_object( $primary_title, $status );
 			if ( is_wp_error( $bundle ) ) {
 				$this->redirect_with_error( $bundle->get_error_message() );
 			}
@@ -2269,7 +2270,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$featured_image_id = $fallback_featured_image_id;
 
 			if ( 'local_composite' === $bundle_image_mode ) {
-				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $title, $bundle_composite_options );
+				$composite_image_id = $this->generate_bundle_composite_image( $bundle_post_id, $default_data['rows'], $primary_title, $bundle_composite_options );
 				if ( $composite_image_id > 0 ) {
 					$featured_image_id = $composite_image_id;
 				}
@@ -2345,6 +2346,58 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 			wp_safe_redirect( $redirect_url );
 			exit;
+		}
+
+		private function build_bundle_title_with_suffix( $title, $suffix ) {
+			$title  = trim( (string) $title );
+			$suffix = trim( (string) $suffix );
+
+			if ( '' === $suffix ) {
+				return $title;
+			}
+
+			if ( '' === $title ) {
+				return $suffix;
+			}
+
+			return $title . ' - ' . $suffix;
+		}
+
+		private function build_primary_variant_bundle_title( $title, $parts_raw ) {
+			if ( ! is_array( $parts_raw ) || empty( $parts_raw ) ) {
+				return trim( (string) $title );
+			}
+
+			$title_product_names = array();
+			foreach ( $parts_raw as $part_raw ) {
+				$part_raw = is_array( $part_raw ) ? $part_raw : array();
+				if ( empty( $this->sanitize_variant_groups_from_part( $part_raw ) ) ) {
+					continue;
+				}
+
+				$default_product_id = isset( $part_raw['default_product'] ) ? absint( $part_raw['default_product'] ) : 0;
+				if ( $default_product_id <= 0 ) {
+					continue;
+				}
+
+				$product = wc_get_product( $default_product_id );
+				if ( $product && is_a( $product, 'WC_Product' ) ) {
+					$title_product_names[] = trim( (string) $product->get_name() );
+				}
+			}
+
+			$title_product_names = array_values(
+				array_unique(
+					array_filter(
+						$title_product_names,
+						function( $name ) {
+							return '' !== trim( (string) $name );
+						}
+					)
+				)
+			);
+
+			return $this->build_bundle_title_with_suffix( $title, implode( ' + ', $title_product_names ) );
 		}
 
 		private function build_variant_bundle_part_configs( $parts_raw ) {
@@ -2471,11 +2524,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					continue;
 				}
 
-				$title = isset( $settings['title'] ) ? (string) $settings['title'] : '';
-				$suffix = isset( $variant_config['title_suffix'] ) ? trim( (string) $variant_config['title_suffix'] ) : '';
-				if ( '' !== $suffix ) {
-					$title .= ' - ' . $suffix;
-				}
+				$title = $this->build_bundle_title_with_suffix(
+					isset( $settings['title'] ) ? (string) $settings['title'] : '',
+					isset( $variant_config['title_suffix'] ) ? (string) $variant_config['title_suffix'] : ''
+				);
 
 				$created_id = $this->create_bundle_from_sanitized_items( $title, $items, $settings );
 				if ( $created_id > 0 ) {
