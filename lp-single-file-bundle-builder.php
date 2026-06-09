@@ -142,9 +142,17 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'stock_status'         => 'instock',
 				'tax_status'           => 'taxable',
 				'bundle_image_mode'    => 'ai_prompt',
-				'bundle_composite_layout'     => 'grid',
+				'bundle_composite_layout'     => 'collage',
 				'bundle_composite_spacing'    => 'tight',
-				'bundle_composite_background' => 'warm',
+				'bundle_composite_background' => 'white',
+				'bundle_composite_canvas'     => 'square',
+				'bundle_composite_box_style'  => 'none',
+				'bundle_composite_shadow'     => 'none',
+				'bundle_composite_trim'       => 'auto',
+				'bundle_composite_primary_scale' => 'large',
+				'bundle_composite_secondary_scale' => 'medium',
+				'bundle_composite_secondary_position' => 'top_right',
+				'bundle_composite_overlap' => 'medium',
 			);
 		}
 
@@ -173,7 +181,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 		private function sanitize_bundle_composite_layout( $value ) {
 			$layout = sanitize_key( (string) $value );
-			return in_array( $layout, array( 'grid', 'featured', 'row' ), true ) ? $layout : 'grid';
+			return in_array( $layout, array( 'collage', 'diagonal', 'hero', 'grid', 'featured', 'row' ), true ) ? $layout : 'collage';
 		}
 
 		private function sanitize_bundle_composite_spacing( $value ) {
@@ -183,7 +191,42 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 		private function sanitize_bundle_composite_background( $value ) {
 			$background = sanitize_key( (string) $value );
-			return in_array( $background, array( 'warm', 'white', 'gray' ), true ) ? $background : 'warm';
+			return in_array( $background, array( 'warm', 'white', 'gray' ), true ) ? $background : 'white';
+		}
+
+		private function sanitize_bundle_composite_canvas( $value ) {
+			$canvas = sanitize_key( (string) $value );
+			return in_array( $canvas, array( 'square', 'landscape', 'portrait' ), true ) ? $canvas : 'square';
+		}
+
+		private function sanitize_bundle_composite_box_style( $value ) {
+			$box_style = sanitize_key( (string) $value );
+			return in_array( $box_style, array( 'none', 'cards', 'border' ), true ) ? $box_style : 'none';
+		}
+
+		private function sanitize_bundle_composite_shadow( $value ) {
+			$shadow = sanitize_key( (string) $value );
+			return in_array( $shadow, array( 'none', 'soft', 'strong' ), true ) ? $shadow : 'none';
+		}
+
+		private function sanitize_bundle_composite_trim( $value ) {
+			$trim = sanitize_key( (string) $value );
+			return in_array( $trim, array( 'auto', 'none' ), true ) ? $trim : 'auto';
+		}
+
+		private function sanitize_bundle_composite_scale( $value, $fallback = 'medium' ) {
+			$scale = sanitize_key( (string) $value );
+			return in_array( $scale, array( 'small', 'medium', 'large', 'xlarge' ), true ) ? $scale : $fallback;
+		}
+
+		private function sanitize_bundle_composite_secondary_position( $value ) {
+			$position = sanitize_key( (string) $value );
+			return in_array( $position, array( 'top_right', 'bottom_right', 'bottom_left', 'top_left', 'right', 'left' ), true ) ? $position : 'top_right';
+		}
+
+		private function sanitize_bundle_composite_overlap( $value ) {
+			$overlap = sanitize_key( (string) $value );
+			return in_array( $overlap, array( 'none', 'subtle', 'medium', 'strong' ), true ) ? $overlap : 'medium';
 		}
 
 		private function sanitize_bundle_composite_options( $raw_options ) {
@@ -192,11 +235,27 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			$layout      = isset( $raw_options['bundle_composite_layout'] ) ? $raw_options['bundle_composite_layout'] : ( isset( $raw_options['layout'] ) ? $raw_options['layout'] : $defaults['bundle_composite_layout'] );
 			$spacing     = isset( $raw_options['bundle_composite_spacing'] ) ? $raw_options['bundle_composite_spacing'] : ( isset( $raw_options['spacing'] ) ? $raw_options['spacing'] : $defaults['bundle_composite_spacing'] );
 			$background  = isset( $raw_options['bundle_composite_background'] ) ? $raw_options['bundle_composite_background'] : ( isset( $raw_options['background'] ) ? $raw_options['background'] : $defaults['bundle_composite_background'] );
+			$canvas      = isset( $raw_options['bundle_composite_canvas'] ) ? $raw_options['bundle_composite_canvas'] : ( isset( $raw_options['canvas'] ) ? $raw_options['canvas'] : $defaults['bundle_composite_canvas'] );
+			$box_style   = isset( $raw_options['bundle_composite_box_style'] ) ? $raw_options['bundle_composite_box_style'] : ( isset( $raw_options['box_style'] ) ? $raw_options['box_style'] : $defaults['bundle_composite_box_style'] );
+			$shadow      = isset( $raw_options['bundle_composite_shadow'] ) ? $raw_options['bundle_composite_shadow'] : ( isset( $raw_options['shadow'] ) ? $raw_options['shadow'] : $defaults['bundle_composite_shadow'] );
+			$trim        = isset( $raw_options['bundle_composite_trim'] ) ? $raw_options['bundle_composite_trim'] : ( isset( $raw_options['trim'] ) ? $raw_options['trim'] : $defaults['bundle_composite_trim'] );
+			$primary_scale = isset( $raw_options['bundle_composite_primary_scale'] ) ? $raw_options['bundle_composite_primary_scale'] : ( isset( $raw_options['primary_scale'] ) ? $raw_options['primary_scale'] : $defaults['bundle_composite_primary_scale'] );
+			$secondary_scale = isset( $raw_options['bundle_composite_secondary_scale'] ) ? $raw_options['bundle_composite_secondary_scale'] : ( isset( $raw_options['secondary_scale'] ) ? $raw_options['secondary_scale'] : $defaults['bundle_composite_secondary_scale'] );
+			$secondary_position = isset( $raw_options['bundle_composite_secondary_position'] ) ? $raw_options['bundle_composite_secondary_position'] : ( isset( $raw_options['secondary_position'] ) ? $raw_options['secondary_position'] : $defaults['bundle_composite_secondary_position'] );
+			$overlap     = isset( $raw_options['bundle_composite_overlap'] ) ? $raw_options['bundle_composite_overlap'] : ( isset( $raw_options['overlap'] ) ? $raw_options['overlap'] : $defaults['bundle_composite_overlap'] );
 
 			return array(
-				'layout'     => $this->sanitize_bundle_composite_layout( $layout ),
-				'spacing'    => $this->sanitize_bundle_composite_spacing( $spacing ),
-				'background' => $this->sanitize_bundle_composite_background( $background ),
+				'layout'             => $this->sanitize_bundle_composite_layout( $layout ),
+				'spacing'            => $this->sanitize_bundle_composite_spacing( $spacing ),
+				'background'         => $this->sanitize_bundle_composite_background( $background ),
+				'canvas'             => $this->sanitize_bundle_composite_canvas( $canvas ),
+				'box_style'          => $this->sanitize_bundle_composite_box_style( $box_style ),
+				'shadow'             => $this->sanitize_bundle_composite_shadow( $shadow ),
+				'trim'               => $this->sanitize_bundle_composite_trim( $trim ),
+				'primary_scale'      => $this->sanitize_bundle_composite_scale( $primary_scale, 'large' ),
+				'secondary_scale'    => $this->sanitize_bundle_composite_scale( $secondary_scale, 'medium' ),
+				'secondary_position' => $this->sanitize_bundle_composite_secondary_position( $secondary_position ),
+				'overlap'            => $this->sanitize_bundle_composite_overlap( $overlap ),
 			);
 		}
 
@@ -241,6 +300,14 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'bundle_composite_layout'     => $bundle_composite_options['layout'],
 				'bundle_composite_spacing'    => $bundle_composite_options['spacing'],
 				'bundle_composite_background' => $bundle_composite_options['background'],
+				'bundle_composite_canvas'     => $bundle_composite_options['canvas'],
+				'bundle_composite_box_style'  => $bundle_composite_options['box_style'],
+				'bundle_composite_shadow'     => $bundle_composite_options['shadow'],
+				'bundle_composite_trim'       => $bundle_composite_options['trim'],
+				'bundle_composite_primary_scale' => $bundle_composite_options['primary_scale'],
+				'bundle_composite_secondary_scale' => $bundle_composite_options['secondary_scale'],
+				'bundle_composite_secondary_position' => $bundle_composite_options['secondary_position'],
+				'bundle_composite_overlap' => $bundle_composite_options['overlap'],
 			);
 		}
 
@@ -269,6 +336,14 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				'bundle_composite_layout'     => isset( $_POST['bundle_composite_layout'] ) ? wp_unslash( $_POST['bundle_composite_layout'] ) : '',
 				'bundle_composite_spacing'    => isset( $_POST['bundle_composite_spacing'] ) ? wp_unslash( $_POST['bundle_composite_spacing'] ) : '',
 				'bundle_composite_background' => isset( $_POST['bundle_composite_background'] ) ? wp_unslash( $_POST['bundle_composite_background'] ) : '',
+				'bundle_composite_canvas'     => isset( $_POST['bundle_composite_canvas'] ) ? wp_unslash( $_POST['bundle_composite_canvas'] ) : '',
+				'bundle_composite_box_style'  => isset( $_POST['bundle_composite_box_style'] ) ? wp_unslash( $_POST['bundle_composite_box_style'] ) : '',
+				'bundle_composite_shadow'     => isset( $_POST['bundle_composite_shadow'] ) ? wp_unslash( $_POST['bundle_composite_shadow'] ) : '',
+				'bundle_composite_trim'       => isset( $_POST['bundle_composite_trim'] ) ? wp_unslash( $_POST['bundle_composite_trim'] ) : '',
+				'bundle_composite_primary_scale' => isset( $_POST['bundle_composite_primary_scale'] ) ? wp_unslash( $_POST['bundle_composite_primary_scale'] ) : '',
+				'bundle_composite_secondary_scale' => isset( $_POST['bundle_composite_secondary_scale'] ) ? wp_unslash( $_POST['bundle_composite_secondary_scale'] ) : '',
+				'bundle_composite_secondary_position' => isset( $_POST['bundle_composite_secondary_position'] ) ? wp_unslash( $_POST['bundle_composite_secondary_position'] ) : '',
+				'bundle_composite_overlap' => isset( $_POST['bundle_composite_overlap'] ) ? wp_unslash( $_POST['bundle_composite_overlap'] ) : '',
 			);
 
 			update_option( self::DEFAULTS_OPTION, $this->sanitize_defaults_option( $raw_defaults ) );
@@ -368,6 +443,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_default_bundle_composite_layout"><?php echo esc_html__( 'Composite layout default', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<select id="lp_default_bundle_composite_layout" name="bundle_composite_layout">
+										<option value="collage" <?php selected( $defaults['bundle_composite_layout'], 'collage' ); ?>><?php echo esc_html__( 'Collage overlap', 'lp-bundle-builder' ); ?></option>
+										<option value="diagonal" <?php selected( $defaults['bundle_composite_layout'], 'diagonal' ); ?>><?php echo esc_html__( 'Diagonal hero', 'lp-bundle-builder' ); ?></option>
+										<option value="hero" <?php selected( $defaults['bundle_composite_layout'], 'hero' ); ?>><?php echo esc_html__( 'Main product hero', 'lp-bundle-builder' ); ?></option>
 										<option value="grid" <?php selected( $defaults['bundle_composite_layout'], 'grid' ); ?>><?php echo esc_html__( 'Even grid', 'lp-bundle-builder' ); ?></option>
 										<option value="featured" <?php selected( $defaults['bundle_composite_layout'], 'featured' ); ?>><?php echo esc_html__( 'Large first product', 'lp-bundle-builder' ); ?></option>
 										<option value="row" <?php selected( $defaults['bundle_composite_layout'], 'row' ); ?>><?php echo esc_html__( 'Single row', 'lp-bundle-builder' ); ?></option>
@@ -391,6 +469,90 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										<option value="warm" <?php selected( $defaults['bundle_composite_background'], 'warm' ); ?>><?php echo esc_html__( 'Warm white', 'lp-bundle-builder' ); ?></option>
 										<option value="white" <?php selected( $defaults['bundle_composite_background'], 'white' ); ?>><?php echo esc_html__( 'Pure white', 'lp-bundle-builder' ); ?></option>
 										<option value="gray" <?php selected( $defaults['bundle_composite_background'], 'gray' ); ?>><?php echo esc_html__( 'Light gray', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_canvas"><?php echo esc_html__( 'Composite canvas default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_canvas" name="bundle_composite_canvas">
+										<option value="square" <?php selected( $defaults['bundle_composite_canvas'], 'square' ); ?>><?php echo esc_html__( 'Square', 'lp-bundle-builder' ); ?></option>
+										<option value="landscape" <?php selected( $defaults['bundle_composite_canvas'], 'landscape' ); ?>><?php echo esc_html__( 'Landscape', 'lp-bundle-builder' ); ?></option>
+										<option value="portrait" <?php selected( $defaults['bundle_composite_canvas'], 'portrait' ); ?>><?php echo esc_html__( 'Portrait', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_box_style"><?php echo esc_html__( 'Composite box style default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_box_style" name="bundle_composite_box_style">
+										<option value="none" <?php selected( $defaults['bundle_composite_box_style'], 'none' ); ?>><?php echo esc_html__( 'No boxes', 'lp-bundle-builder' ); ?></option>
+										<option value="cards" <?php selected( $defaults['bundle_composite_box_style'], 'cards' ); ?>><?php echo esc_html__( 'Borderless cards', 'lp-bundle-builder' ); ?></option>
+										<option value="border" <?php selected( $defaults['bundle_composite_box_style'], 'border' ); ?>><?php echo esc_html__( 'Thin border cards', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_shadow"><?php echo esc_html__( 'Composite shadow default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_shadow" name="bundle_composite_shadow">
+										<option value="none" <?php selected( $defaults['bundle_composite_shadow'], 'none' ); ?>><?php echo esc_html__( 'No shadow', 'lp-bundle-builder' ); ?></option>
+										<option value="soft" <?php selected( $defaults['bundle_composite_shadow'], 'soft' ); ?>><?php echo esc_html__( 'Soft shadow', 'lp-bundle-builder' ); ?></option>
+										<option value="strong" <?php selected( $defaults['bundle_composite_shadow'], 'strong' ); ?>><?php echo esc_html__( 'Strong shadow', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_trim"><?php echo esc_html__( 'Composite whitespace default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_trim" name="bundle_composite_trim">
+										<option value="auto" <?php selected( $defaults['bundle_composite_trim'], 'auto' ); ?>><?php echo esc_html__( 'Auto trim product whitespace', 'lp-bundle-builder' ); ?></option>
+										<option value="none" <?php selected( $defaults['bundle_composite_trim'], 'none' ); ?>><?php echo esc_html__( 'Keep full product images', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_primary_scale"><?php echo esc_html__( 'Main product size default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_primary_scale" name="bundle_composite_primary_scale">
+										<option value="medium" <?php selected( $defaults['bundle_composite_primary_scale'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="large" <?php selected( $defaults['bundle_composite_primary_scale'], 'large' ); ?>><?php echo esc_html__( 'Large', 'lp-bundle-builder' ); ?></option>
+										<option value="xlarge" <?php selected( $defaults['bundle_composite_primary_scale'], 'xlarge' ); ?>><?php echo esc_html__( 'Extra large', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_secondary_scale"><?php echo esc_html__( 'Other products size default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_secondary_scale" name="bundle_composite_secondary_scale">
+										<option value="small" <?php selected( $defaults['bundle_composite_secondary_scale'], 'small' ); ?>><?php echo esc_html__( 'Small', 'lp-bundle-builder' ); ?></option>
+										<option value="medium" <?php selected( $defaults['bundle_composite_secondary_scale'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="large" <?php selected( $defaults['bundle_composite_secondary_scale'], 'large' ); ?>><?php echo esc_html__( 'Large', 'lp-bundle-builder' ); ?></option>
+										<option value="xlarge" <?php selected( $defaults['bundle_composite_secondary_scale'], 'xlarge' ); ?>><?php echo esc_html__( 'Extra large', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_secondary_position"><?php echo esc_html__( 'Other products position default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_secondary_position" name="bundle_composite_secondary_position">
+										<option value="top_right" <?php selected( $defaults['bundle_composite_secondary_position'], 'top_right' ); ?>><?php echo esc_html__( 'Top right', 'lp-bundle-builder' ); ?></option>
+										<option value="right" <?php selected( $defaults['bundle_composite_secondary_position'], 'right' ); ?>><?php echo esc_html__( 'Right', 'lp-bundle-builder' ); ?></option>
+										<option value="bottom_right" <?php selected( $defaults['bundle_composite_secondary_position'], 'bottom_right' ); ?>><?php echo esc_html__( 'Bottom right', 'lp-bundle-builder' ); ?></option>
+										<option value="top_left" <?php selected( $defaults['bundle_composite_secondary_position'], 'top_left' ); ?>><?php echo esc_html__( 'Top left', 'lp-bundle-builder' ); ?></option>
+										<option value="left" <?php selected( $defaults['bundle_composite_secondary_position'], 'left' ); ?>><?php echo esc_html__( 'Left', 'lp-bundle-builder' ); ?></option>
+										<option value="bottom_left" <?php selected( $defaults['bundle_composite_secondary_position'], 'bottom_left' ); ?>><?php echo esc_html__( 'Bottom left', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="lp_default_bundle_composite_overlap"><?php echo esc_html__( 'Composite overlap default', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_default_bundle_composite_overlap" name="bundle_composite_overlap">
+										<option value="none" <?php selected( $defaults['bundle_composite_overlap'], 'none' ); ?>><?php echo esc_html__( 'None', 'lp-bundle-builder' ); ?></option>
+										<option value="subtle" <?php selected( $defaults['bundle_composite_overlap'], 'subtle' ); ?>><?php echo esc_html__( 'Subtle', 'lp-bundle-builder' ); ?></option>
+										<option value="medium" <?php selected( $defaults['bundle_composite_overlap'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="strong" <?php selected( $defaults['bundle_composite_overlap'], 'strong' ); ?>><?php echo esc_html__( 'Strong', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -536,6 +698,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								<th scope="row"><label for="lp_bundle_composite_layout"><?php echo esc_html__( 'Composite layout', 'lp-bundle-builder' ); ?></label></th>
 								<td>
 									<select id="lp_bundle_composite_layout" name="bundle_composite_layout">
+										<option value="collage" <?php selected( $defaults['bundle_composite_layout'], 'collage' ); ?>><?php echo esc_html__( 'Collage overlap', 'lp-bundle-builder' ); ?></option>
+										<option value="diagonal" <?php selected( $defaults['bundle_composite_layout'], 'diagonal' ); ?>><?php echo esc_html__( 'Diagonal hero', 'lp-bundle-builder' ); ?></option>
+										<option value="hero" <?php selected( $defaults['bundle_composite_layout'], 'hero' ); ?>><?php echo esc_html__( 'Main product hero', 'lp-bundle-builder' ); ?></option>
 										<option value="grid" <?php selected( $defaults['bundle_composite_layout'], 'grid' ); ?>><?php echo esc_html__( 'Even grid', 'lp-bundle-builder' ); ?></option>
 										<option value="featured" <?php selected( $defaults['bundle_composite_layout'], 'featured' ); ?>><?php echo esc_html__( 'Large first product', 'lp-bundle-builder' ); ?></option>
 										<option value="row" <?php selected( $defaults['bundle_composite_layout'], 'row' ); ?>><?php echo esc_html__( 'Single row', 'lp-bundle-builder' ); ?></option>
@@ -559,6 +724,90 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 										<option value="warm" <?php selected( $defaults['bundle_composite_background'], 'warm' ); ?>><?php echo esc_html__( 'Warm white', 'lp-bundle-builder' ); ?></option>
 										<option value="white" <?php selected( $defaults['bundle_composite_background'], 'white' ); ?>><?php echo esc_html__( 'Pure white', 'lp-bundle-builder' ); ?></option>
 										<option value="gray" <?php selected( $defaults['bundle_composite_background'], 'gray' ); ?>><?php echo esc_html__( 'Light gray', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_canvas"><?php echo esc_html__( 'Composite canvas', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_canvas" name="bundle_composite_canvas">
+										<option value="square" <?php selected( $defaults['bundle_composite_canvas'], 'square' ); ?>><?php echo esc_html__( 'Square', 'lp-bundle-builder' ); ?></option>
+										<option value="landscape" <?php selected( $defaults['bundle_composite_canvas'], 'landscape' ); ?>><?php echo esc_html__( 'Landscape', 'lp-bundle-builder' ); ?></option>
+										<option value="portrait" <?php selected( $defaults['bundle_composite_canvas'], 'portrait' ); ?>><?php echo esc_html__( 'Portrait', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_box_style"><?php echo esc_html__( 'Composite box style', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_box_style" name="bundle_composite_box_style">
+										<option value="none" <?php selected( $defaults['bundle_composite_box_style'], 'none' ); ?>><?php echo esc_html__( 'No boxes', 'lp-bundle-builder' ); ?></option>
+										<option value="cards" <?php selected( $defaults['bundle_composite_box_style'], 'cards' ); ?>><?php echo esc_html__( 'Borderless cards', 'lp-bundle-builder' ); ?></option>
+										<option value="border" <?php selected( $defaults['bundle_composite_box_style'], 'border' ); ?>><?php echo esc_html__( 'Thin border cards', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_shadow"><?php echo esc_html__( 'Composite shadow', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_shadow" name="bundle_composite_shadow">
+										<option value="none" <?php selected( $defaults['bundle_composite_shadow'], 'none' ); ?>><?php echo esc_html__( 'No shadow', 'lp-bundle-builder' ); ?></option>
+										<option value="soft" <?php selected( $defaults['bundle_composite_shadow'], 'soft' ); ?>><?php echo esc_html__( 'Soft shadow', 'lp-bundle-builder' ); ?></option>
+										<option value="strong" <?php selected( $defaults['bundle_composite_shadow'], 'strong' ); ?>><?php echo esc_html__( 'Strong shadow', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_trim"><?php echo esc_html__( 'Composite whitespace', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_trim" name="bundle_composite_trim">
+										<option value="auto" <?php selected( $defaults['bundle_composite_trim'], 'auto' ); ?>><?php echo esc_html__( 'Auto trim product whitespace', 'lp-bundle-builder' ); ?></option>
+										<option value="none" <?php selected( $defaults['bundle_composite_trim'], 'none' ); ?>><?php echo esc_html__( 'Keep full product images', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_primary_scale"><?php echo esc_html__( 'Main product size', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_primary_scale" name="bundle_composite_primary_scale">
+										<option value="medium" <?php selected( $defaults['bundle_composite_primary_scale'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="large" <?php selected( $defaults['bundle_composite_primary_scale'], 'large' ); ?>><?php echo esc_html__( 'Large', 'lp-bundle-builder' ); ?></option>
+										<option value="xlarge" <?php selected( $defaults['bundle_composite_primary_scale'], 'xlarge' ); ?>><?php echo esc_html__( 'Extra large', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_secondary_scale"><?php echo esc_html__( 'Other products size', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_secondary_scale" name="bundle_composite_secondary_scale">
+										<option value="small" <?php selected( $defaults['bundle_composite_secondary_scale'], 'small' ); ?>><?php echo esc_html__( 'Small', 'lp-bundle-builder' ); ?></option>
+										<option value="medium" <?php selected( $defaults['bundle_composite_secondary_scale'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="large" <?php selected( $defaults['bundle_composite_secondary_scale'], 'large' ); ?>><?php echo esc_html__( 'Large', 'lp-bundle-builder' ); ?></option>
+										<option value="xlarge" <?php selected( $defaults['bundle_composite_secondary_scale'], 'xlarge' ); ?>><?php echo esc_html__( 'Extra large', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_secondary_position"><?php echo esc_html__( 'Other products position', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_secondary_position" name="bundle_composite_secondary_position">
+										<option value="top_right" <?php selected( $defaults['bundle_composite_secondary_position'], 'top_right' ); ?>><?php echo esc_html__( 'Top right', 'lp-bundle-builder' ); ?></option>
+										<option value="right" <?php selected( $defaults['bundle_composite_secondary_position'], 'right' ); ?>><?php echo esc_html__( 'Right', 'lp-bundle-builder' ); ?></option>
+										<option value="bottom_right" <?php selected( $defaults['bundle_composite_secondary_position'], 'bottom_right' ); ?>><?php echo esc_html__( 'Bottom right', 'lp-bundle-builder' ); ?></option>
+										<option value="top_left" <?php selected( $defaults['bundle_composite_secondary_position'], 'top_left' ); ?>><?php echo esc_html__( 'Top left', 'lp-bundle-builder' ); ?></option>
+										<option value="left" <?php selected( $defaults['bundle_composite_secondary_position'], 'left' ); ?>><?php echo esc_html__( 'Left', 'lp-bundle-builder' ); ?></option>
+										<option value="bottom_left" <?php selected( $defaults['bundle_composite_secondary_position'], 'bottom_left' ); ?>><?php echo esc_html__( 'Bottom left', 'lp-bundle-builder' ); ?></option>
+									</select>
+								</td>
+							</tr>
+							<tr class="lp-composite-option-row">
+								<th scope="row"><label for="lp_bundle_composite_overlap"><?php echo esc_html__( 'Composite overlap', 'lp-bundle-builder' ); ?></label></th>
+								<td>
+									<select id="lp_bundle_composite_overlap" name="bundle_composite_overlap">
+										<option value="none" <?php selected( $defaults['bundle_composite_overlap'], 'none' ); ?>><?php echo esc_html__( 'None', 'lp-bundle-builder' ); ?></option>
+										<option value="subtle" <?php selected( $defaults['bundle_composite_overlap'], 'subtle' ); ?>><?php echo esc_html__( 'Subtle', 'lp-bundle-builder' ); ?></option>
+										<option value="medium" <?php selected( $defaults['bundle_composite_overlap'], 'medium' ); ?>><?php echo esc_html__( 'Medium', 'lp-bundle-builder' ); ?></option>
+										<option value="strong" <?php selected( $defaults['bundle_composite_overlap'], 'strong' ); ?>><?php echo esc_html__( 'Strong', 'lp-bundle-builder' ); ?></option>
 									</select>
 								</td>
 							</tr>
@@ -1053,10 +1302,26 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					const layout = document.getElementById('lp_bundle_composite_layout');
 					const spacing = document.getElementById('lp_bundle_composite_spacing');
 					const background = document.getElementById('lp_bundle_composite_background');
+					const canvas = document.getElementById('lp_bundle_composite_canvas');
+					const boxStyle = document.getElementById('lp_bundle_composite_box_style');
+					const shadow = document.getElementById('lp_bundle_composite_shadow');
+					const trim = document.getElementById('lp_bundle_composite_trim');
+					const primaryScale = document.getElementById('lp_bundle_composite_primary_scale');
+					const secondaryScale = document.getElementById('lp_bundle_composite_secondary_scale');
+					const secondaryPosition = document.getElementById('lp_bundle_composite_secondary_position');
+					const overlap = document.getElementById('lp_bundle_composite_overlap');
 					return {
-						bundle_composite_layout: layout ? layout.value : 'grid',
+						bundle_composite_layout: layout ? layout.value : 'collage',
 						bundle_composite_spacing: spacing ? spacing.value : 'tight',
-						bundle_composite_background: background ? background.value : 'warm'
+						bundle_composite_background: background ? background.value : 'white',
+						bundle_composite_canvas: canvas ? canvas.value : 'square',
+						bundle_composite_box_style: boxStyle ? boxStyle.value : 'none',
+						bundle_composite_shadow: shadow ? shadow.value : 'none',
+						bundle_composite_trim: trim ? trim.value : 'auto',
+						bundle_composite_primary_scale: primaryScale ? primaryScale.value : 'large',
+						bundle_composite_secondary_scale: secondaryScale ? secondaryScale.value : 'medium',
+						bundle_composite_secondary_position: secondaryPosition ? secondaryPosition.value : 'top_right',
+						bundle_composite_overlap: overlap ? overlap.value : 'medium'
 					};
 				}
 
@@ -1180,7 +1445,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						setPreviewStatus('');
 					});
 				}
-				document.querySelectorAll('#lp_bundle_composite_layout, #lp_bundle_composite_spacing, #lp_bundle_composite_background').forEach(function(control){
+				document.querySelectorAll('.lp-composite-option-row select').forEach(function(control){
 					control.addEventListener('change', function(){
 						clearPreview();
 						setPreviewStatus('');
@@ -2784,6 +3049,124 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			);
 		}
 
+		private function get_bundle_composite_canvas_dimensions( $canvas ) {
+			$canvas = $this->sanitize_bundle_composite_canvas( $canvas );
+
+			if ( 'landscape' === $canvas ) {
+				return array( 'width' => 1800, 'height' => 1200 );
+			}
+
+			if ( 'portrait' === $canvas ) {
+				return array( 'width' => 1200, 'height' => 1800 );
+			}
+
+			return array( 'width' => 1600, 'height' => 1600 );
+		}
+
+		private function get_bundle_composite_scale_ratio( $scale, $is_primary = false ) {
+			$scale = $this->sanitize_bundle_composite_scale( $scale, $is_primary ? 'large' : 'medium' );
+			$primary_ratios = array(
+				'small'  => 0.55,
+				'medium' => 0.66,
+				'large'  => 0.76,
+				'xlarge' => 0.88,
+			);
+			$secondary_ratios = array(
+				'small'  => 0.30,
+				'medium' => 0.42,
+				'large'  => 0.53,
+				'xlarge' => 0.64,
+			);
+			$ratios = $is_primary ? $primary_ratios : $secondary_ratios;
+
+			return isset( $ratios[ $scale ] ) ? (float) $ratios[ $scale ] : ( $is_primary ? 0.76 : 0.42 );
+		}
+
+		private function get_bundle_composite_overlap_ratio( $overlap ) {
+			$overlap = $this->sanitize_bundle_composite_overlap( $overlap );
+			$ratios = array(
+				'none'   => 0,
+				'subtle' => 0.08,
+				'medium' => 0.15,
+				'strong' => 0.23,
+			);
+
+			return isset( $ratios[ $overlap ] ) ? (float) $ratios[ $overlap ] : 0.15;
+		}
+
+		private function normalize_bundle_composite_slot( $slot, $canvas_width, $canvas_height ) {
+			$slot = wp_parse_args(
+				(array) $slot,
+				array(
+					'x' => 0,
+					'y' => 0,
+					'w' => 1,
+					'h' => 1,
+				)
+			);
+
+			$slot['w'] = max( 1, min( (int) round( $slot['w'] ), (int) $canvas_width ) );
+			$slot['h'] = max( 1, min( (int) round( $slot['h'] ), (int) $canvas_height ) );
+			$slot['x'] = max( 0, min( (int) round( $slot['x'] ), (int) $canvas_width - $slot['w'] ) );
+			$slot['y'] = max( 0, min( (int) round( $slot['y'] ), (int) $canvas_height - $slot['h'] ) );
+
+			return $slot;
+		}
+
+		private function get_bundle_composite_positioned_slot( $position, $slot_w, $slot_h, $pad, $inner_w, $inner_h, $offset = 0 ) {
+			$position = $this->sanitize_bundle_composite_secondary_position( $position );
+			$offset   = max( 0, (int) $offset );
+			$left     = $pad + $offset;
+			$right    = $pad + $inner_w - $slot_w - $offset;
+			$top      = $pad + $offset;
+			$bottom   = $pad + $inner_h - $slot_h - $offset;
+			$middle_y = $pad + (int) round( ( $inner_h - $slot_h ) / 2 );
+
+			if ( 'bottom_right' === $position ) {
+				return array( 'x' => $right, 'y' => $bottom, 'w' => $slot_w, 'h' => $slot_h );
+			}
+
+			if ( 'bottom_left' === $position ) {
+				return array( 'x' => $left, 'y' => $bottom, 'w' => $slot_w, 'h' => $slot_h );
+			}
+
+			if ( 'top_left' === $position ) {
+				return array( 'x' => $left, 'y' => $top, 'w' => $slot_w, 'h' => $slot_h );
+			}
+
+			if ( 'right' === $position ) {
+				return array( 'x' => $right, 'y' => $middle_y, 'w' => $slot_w, 'h' => $slot_h );
+			}
+
+			if ( 'left' === $position ) {
+				return array( 'x' => $left, 'y' => $middle_y, 'w' => $slot_w, 'h' => $slot_h );
+			}
+
+			return array( 'x' => $right, 'y' => $top, 'w' => $slot_w, 'h' => $slot_h );
+		}
+
+		private function add_bundle_composite_shadow( $canvas, $image, $x, $y, $shadow ) {
+			$shadow = $this->sanitize_bundle_composite_shadow( $shadow );
+			if ( 'none' === $shadow ) {
+				return;
+			}
+
+			$opacity = 'strong' === $shadow ? 28 : 18;
+			$sigma   = 'strong' === $shadow ? 14 : 9;
+			$offset  = 'strong' === $shadow ? 18 : 10;
+
+			try {
+				$shadow_image = clone $image;
+				$shadow_image->setImageBackgroundColor( new \ImagickPixel( 'transparent' ) );
+				$shadow_image->shadowImage( $opacity, $sigma, $offset, $offset );
+				$canvas->compositeImage( $shadow_image, \Imagick::COMPOSITE_OVER, (int) $x, (int) $y );
+				$shadow_image->clear();
+				$shadow_image->destroy();
+			} catch ( \Exception $exception ) {
+				return;
+			}
+		}
+
 		private function build_bundle_composite_image_binary( $default_products_rows, $options = array() ) {
 			if ( ! class_exists( 'Imagick' ) || ! class_exists( 'ImagickPixel' ) ) {
 				return '';
@@ -2795,8 +3178,10 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				return '';
 			}
 
-			$canvas_size = 1600;
-			$slots       = $this->get_bundle_composite_slots( count( $source_image_paths ), $canvas_size, $options );
+			$dimensions    = $this->get_bundle_composite_canvas_dimensions( $options['canvas'] );
+			$canvas_width  = (int) $dimensions['width'];
+			$canvas_height = (int) $dimensions['height'];
+			$slots         = $this->get_bundle_composite_slots( count( $source_image_paths ), $canvas_width, $canvas_height, $options );
 			if ( empty( $slots ) ) {
 				return '';
 			}
@@ -2804,7 +3189,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			try {
 				$palette = $this->get_bundle_composite_palette( $options['background'] );
 				$canvas = new \Imagick();
-				$canvas->newImage( $canvas_size, $canvas_size, new \ImagickPixel( $palette['canvas'] ) );
+				$canvas->newImage( $canvas_width, $canvas_height, new \ImagickPixel( $palette['canvas'] ) );
 				$canvas->setImageFormat( 'jpeg' );
 				$canvas->setImageColorspace( \Imagick::COLORSPACE_SRGB );
 
@@ -2813,22 +3198,35 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						continue;
 					}
 
-					$box = new \Imagick();
-					$box->newImage( (int) $slot['w'], (int) $slot['h'], new \ImagickPixel( $palette['box'] ) );
-					$box->setImageFormat( 'png' );
-					$canvas->compositeImage( $box, \Imagick::COMPOSITE_OVER, (int) $slot['x'], (int) $slot['y'] );
-					$box->clear();
-					$box->destroy();
+					if ( 'none' !== $options['box_style'] ) {
+						$border_size = 'border' === $options['box_style'] ? 2 : 0;
+						$box_w       = max( 1, (int) $slot['w'] - ( $border_size * 2 ) );
+						$box_h       = max( 1, (int) $slot['h'] - ( $border_size * 2 ) );
+						$box         = new \Imagick();
+						$box->newImage( $box_w, $box_h, new \ImagickPixel( $palette['box'] ) );
+						$box->setImageFormat( 'png' );
+						if ( $border_size > 0 ) {
+							$box->borderImage( new \ImagickPixel( '#dedede' ), $border_size, $border_size );
+						}
+						$canvas->compositeImage( $box, \Imagick::COMPOSITE_OVER, (int) $slot['x'], (int) $slot['y'] );
+						$box->clear();
+						$box->destroy();
+					}
 
 					$image = new \Imagick();
 					$image->readImage( $source_image_paths[ $index ] );
 					$image->setImageColorspace( \Imagick::COLORSPACE_SRGB );
 					$image->setImageBackgroundColor( new \ImagickPixel( 'transparent' ) );
 					$image = $image->mergeImageLayers( \Imagick::LAYERMETHOD_MERGE );
+					if ( 'auto' === $options['trim'] ) {
+						$image->trimImage( 4000 );
+						$image->setImagePage( 0, 0, 0, 0 );
+					}
 					$image->thumbnailImage( (int) $slot['w'], (int) $slot['h'], true, true );
 
 					$x = (int) $slot['x'] + (int) floor( ( (int) $slot['w'] - $image->getImageWidth() ) / 2 );
 					$y = (int) $slot['y'] + (int) floor( ( (int) $slot['h'] - $image->getImageHeight() ) / 2 );
+					$this->add_bundle_composite_shadow( $canvas, $image, $x, $y, $options['shadow'] );
 					$canvas->compositeImage( $image, \Imagick::COMPOSITE_OVER, $x, $y );
 					$image->clear();
 					$image->destroy();
@@ -2891,40 +3289,42 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return (int) $attachment_id;
 		}
 
-		private function get_bundle_composite_slots( $count, $canvas_size, $options = array() ) {
+		private function get_bundle_composite_slots( $count, $canvas_width, $canvas_height = null, $options = array() ) {
 			$count = max( 1, min( 4, (int) $count ) );
-			$canvas_size = max( 600, (int) $canvas_size );
-			$options = $this->sanitize_bundle_composite_options( (array) $options );
-			$spacing = $this->get_bundle_composite_spacing_values( $options['spacing'], $canvas_size );
-			$pad = (int) $spacing['outer_pad'];
-			$gap = (int) $spacing['gap'];
-			$inner = $canvas_size - ( $pad * 2 );
+			$canvas_width  = max( 600, (int) $canvas_width );
+			$canvas_height = null === $canvas_height ? $canvas_width : max( 600, (int) $canvas_height );
+			$options       = $this->sanitize_bundle_composite_options( (array) $options );
+			$spacing       = $this->get_bundle_composite_spacing_values( $options['spacing'], max( $canvas_width, $canvas_height ) );
+			$pad           = (int) $spacing['outer_pad'];
+			$gap           = (int) $spacing['gap'];
+			$inner_w       = $canvas_width - ( $pad * 2 );
+			$inner_h       = $canvas_height - ( $pad * 2 );
 
 			if ( 1 === $count ) {
-				return array( array( 'x' => $pad, 'y' => $pad, 'w' => $inner, 'h' => $inner ) );
+				return array( array( 'x' => $pad, 'y' => $pad, 'w' => $inner_w, 'h' => $inner_h ) );
 			}
 
 			if ( 'row' === $options['layout'] ) {
-				$cell_w = (int) floor( ( $inner - ( $gap * ( $count - 1 ) ) ) / $count );
+				$cell_w = (int) floor( ( $inner_w - ( $gap * ( $count - 1 ) ) ) / $count );
 				$slots  = array();
 				for ( $index = 0; $index < $count; $index++ ) {
 					$slots[] = array(
 						'x' => $pad + ( $index * ( $cell_w + $gap ) ),
 						'y' => $pad,
 						'w' => $cell_w,
-						'h' => $inner,
+						'h' => $inner_h,
 					);
 				}
 				return $slots;
 			}
 
 			if ( 'featured' === $options['layout'] && $count > 1 ) {
-				$featured_w = (int) floor( $inner * 0.62 );
-				$side_w     = $inner - $featured_w - $gap;
+				$featured_w = (int) floor( $inner_w * 0.62 );
+				$side_w     = $inner_w - $featured_w - $gap;
 				$side_count = $count - 1;
-				$side_h     = (int) floor( ( $inner - ( $gap * ( $side_count - 1 ) ) ) / $side_count );
+				$side_h     = (int) floor( ( $inner_h - ( $gap * ( $side_count - 1 ) ) ) / $side_count );
 				$slots      = array(
-					array( 'x' => $pad, 'y' => $pad, 'w' => $featured_w, 'h' => $inner ),
+					array( 'x' => $pad, 'y' => $pad, 'w' => $featured_w, 'h' => $inner_h ),
 				);
 				for ( $index = 0; $index < $side_count; $index++ ) {
 					$slots[] = array(
@@ -2937,30 +3337,94 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				return $slots;
 			}
 
+			if ( in_array( $options['layout'], array( 'collage', 'diagonal', 'hero' ), true ) ) {
+				$primary_ratio   = $this->get_bundle_composite_scale_ratio( $options['primary_scale'], true );
+				$secondary_ratio = $this->get_bundle_composite_scale_ratio( $options['secondary_scale'], false );
+				$overlap_px      = (int) round( min( $inner_w, $inner_h ) * $this->get_bundle_composite_overlap_ratio( $options['overlap'] ) );
+				$primary_w       = (int) round( $inner_w * $primary_ratio );
+				$primary_h       = (int) round( $inner_h * $primary_ratio );
+				$secondary_w     = (int) round( $inner_w * $secondary_ratio );
+				$secondary_h     = (int) round( $inner_h * $secondary_ratio );
+
+				if ( 'diagonal' === $options['layout'] ) {
+					$primary = array(
+						'x' => $pad + ( $inner_w * 0.03 ),
+						'y' => $pad + ( $inner_h - $primary_h ) * 0.64,
+						'w' => $primary_w,
+						'h' => $primary_h,
+					);
+				} elseif ( 'hero' === $options['layout'] ) {
+					$primary = array(
+						'x' => $pad + ( $inner_w - $primary_w ) * 0.36,
+						'y' => $pad + ( $inner_h - $primary_h ) * 0.54,
+						'w' => $primary_w,
+						'h' => $primary_h,
+					);
+				} else {
+					$primary = array(
+						'x' => $pad + ( $inner_w * 0.06 ),
+						'y' => $pad + ( $inner_h - $primary_h ) * 0.66,
+						'w' => $primary_w,
+						'h' => $primary_h,
+					);
+				}
+
+				$slots = array( $this->normalize_bundle_composite_slot( $primary, $canvas_width, $canvas_height ) );
+				$secondary = $this->get_bundle_composite_positioned_slot( $options['secondary_position'], $secondary_w, $secondary_h, $pad, $inner_w, $inner_h, $gap );
+
+				if ( $overlap_px > 0 && in_array( $options['secondary_position'], array( 'top_right', 'right', 'bottom_right' ), true ) ) {
+					$secondary['x'] = $slots[0]['x'] + $slots[0]['w'] - $overlap_px;
+				} elseif ( $overlap_px > 0 && in_array( $options['secondary_position'], array( 'top_left', 'left', 'bottom_left' ), true ) ) {
+					$secondary['x'] = $slots[0]['x'] - $secondary_w + $overlap_px;
+				}
+
+				if ( $overlap_px > 0 && in_array( $options['secondary_position'], array( 'top_right', 'top_left' ), true ) ) {
+					$secondary['y'] = $slots[0]['y'] - (int) round( $secondary_h * 0.18 );
+				} elseif ( $overlap_px > 0 && in_array( $options['secondary_position'], array( 'bottom_right', 'bottom_left' ), true ) ) {
+					$secondary['y'] = $slots[0]['y'] + $slots[0]['h'] - $overlap_px;
+				}
+
+				$slots[] = $this->normalize_bundle_composite_slot( $secondary, $canvas_width, $canvas_height );
+
+				if ( $count > 2 ) {
+					$extra_positions = array( 'bottom_right', 'top_left', 'bottom_left' );
+					$extra_w         = (int) round( $secondary_w * 0.76 );
+					$extra_h         = (int) round( $secondary_h * 0.76 );
+					for ( $index = 2; $index < $count; $index++ ) {
+						$position = isset( $extra_positions[ $index - 2 ] ) ? $extra_positions[ $index - 2 ] : 'bottom_right';
+						$slot     = $this->get_bundle_composite_positioned_slot( $position, $extra_w, $extra_h, $pad, $inner_w, $inner_h, $gap * ( $index - 1 ) );
+						$slots[]  = $this->normalize_bundle_composite_slot( $slot, $canvas_width, $canvas_height );
+					}
+				}
+
+				return array_slice( $slots, 0, $count );
+			}
+
 			if ( 2 === $count ) {
-				$w = (int) floor( ( $inner - $gap ) / 2 );
+				$w = (int) floor( ( $inner_w - $gap ) / 2 );
 				return array(
-					array( 'x' => $pad, 'y' => $pad, 'w' => $w, 'h' => $inner ),
-					array( 'x' => $pad + $w + $gap, 'y' => $pad, 'w' => $w, 'h' => $inner ),
+					array( 'x' => $pad, 'y' => $pad, 'w' => $w, 'h' => $inner_h ),
+					array( 'x' => $pad + $w + $gap, 'y' => $pad, 'w' => $w, 'h' => $inner_h ),
 				);
 			}
 
 			if ( 3 === $count ) {
-				$half_w = (int) floor( ( $inner - $gap ) / 2 );
-				$half_h = (int) floor( ( $inner - $gap ) / 2 );
+				$half_w = (int) floor( ( $inner_w - $gap ) / 2 );
+				$half_h = (int) floor( ( $inner_h - $gap ) / 2 );
 				return array(
-					array( 'x' => $pad, 'y' => $pad, 'w' => $half_w, 'h' => $inner ),
+					array( 'x' => $pad, 'y' => $pad, 'w' => $half_w, 'h' => $inner_h ),
 					array( 'x' => $pad + $half_w + $gap, 'y' => $pad, 'w' => $half_w, 'h' => $half_h ),
 					array( 'x' => $pad + $half_w + $gap, 'y' => $pad + $half_h + $gap, 'w' => $half_w, 'h' => $half_h ),
 				);
 			}
 
-			$cell = (int) floor( ( $inner - $gap ) / 2 );
+			$cell_w = (int) floor( ( $inner_w - $gap ) / 2 );
+			$cell_h = (int) floor( ( $inner_h - $gap ) / 2 );
 			return array(
-				array( 'x' => $pad, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad + $cell + $gap, 'y' => $pad, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad, 'y' => $pad + $cell + $gap, 'w' => $cell, 'h' => $cell ),
-				array( 'x' => $pad + $cell + $gap, 'y' => $pad + $cell + $gap, 'w' => $cell, 'h' => $cell ),
+				array( 'x' => $pad, 'y' => $pad, 'w' => $cell_w, 'h' => $cell_h ),
+				array( 'x' => $pad + $cell_w + $gap, 'y' => $pad, 'w' => $cell_w, 'h' => $cell_h ),
+				array( 'x' => $pad, 'y' => $pad + $cell_h + $gap, 'w' => $cell_w, 'h' => $cell_h ),
+				array( 'x' => $pad + $cell_w + $gap, 'y' => $pad + $cell_h + $gap, 'w' => $cell_w, 'h' => $cell_h ),
 			);
 		}
 
