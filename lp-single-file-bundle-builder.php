@@ -1330,7 +1330,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 				function normalizeItem(item){
 					return {
-						id: Number(item.value || item.id || 0),
+						id: Number(item.value || item.id || item.product_id || 0),
 						label: String(item.label || item.name || ''),
 						slug: item.slug ? String(item.slug) : '',
 						name: item.name ? String(item.name) : '',
@@ -2381,15 +2381,19 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 		}
 
 		private function get_items_with_fallback( $type, $search, $items, $mode ) {
+			if ( 'default_product' === $type ) {
+				return $this->fallback_product_items( $search, $items, $mode );
+			}
+
 			$rest_items = $this->rest_items_request( $type, $search, $items, $mode );
 			if ( ! empty( $rest_items ) ) {
-				if ( in_array( $type, array( 'products', 'default_product' ), true ) ) {
+				if ( 'products' === $type ) {
 					return $this->hydrate_product_item_image_urls( $rest_items );
 				}
 				return $rest_items;
 			}
 
-			if ( in_array( $type, array( 'products', 'default_product' ), true ) ) {
+			if ( 'products' === $type ) {
 				return $this->fallback_product_items( $search, $items, $mode );
 			}
 
