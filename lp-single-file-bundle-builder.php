@@ -2429,12 +2429,13 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			if ( '' === $route ) {
 				return array();
 			}
+			$request_type = ( 'default_product' === $type ) ? 'products' : $type;
 
 			if ( 'fetch' === $mode ) {
 				$request = new \WP_REST_Request( 'POST', $route );
 				$request->set_body_params(
 					array(
-						'type'  => $type,
+						'type'  => $request_type,
 						'items' => $items,
 					)
 				);
@@ -2442,7 +2443,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$request = new \WP_REST_Request( 'GET', $route );
 				$request->set_query_params(
 					array(
-						'type'   => $type,
+						'type'   => $request_type,
 						'search' => $search,
 					)
 				);
