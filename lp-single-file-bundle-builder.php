@@ -238,6 +238,25 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return max( (float) $min, min( (float) $max, $value ) );
 		}
 
+		private function sanitize_bundle_bool_string( $value ) {
+			return ! empty( $value ) && 'false' !== (string) $value ? 'true' : 'false';
+		}
+
+		private function sanitize_bundle_manual_fit( $value ) {
+			$fit = sanitize_key( (string) $value );
+			return in_array( $fit, array( 'contain', 'cover', 'stretch' ), true ) ? $fit : 'contain';
+		}
+
+		private function sanitize_bundle_manual_layer_shadow( $value ) {
+			$shadow = sanitize_key( (string) $value );
+			return in_array( $shadow, array( 'inherit', 'none', 'soft', 'strong' ), true ) ? $shadow : 'inherit';
+		}
+
+		private function sanitize_bundle_manual_layer_border( $value ) {
+			$border = sanitize_key( (string) $value );
+			return in_array( $border, array( 'inherit', 'none', 'thin' ), true ) ? $border : 'inherit';
+		}
+
 		private function sanitize_bundle_composite_manual_setup( $value ) {
 			if ( is_string( $value ) ) {
 				$decoded = json_decode( $value, true );
@@ -262,8 +281,22 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					'y'                    => $this->sanitize_normalized_float( isset( $layer_raw['y'] ) ? $layer_raw['y'] : 0.05, 0.05 ),
 					'w'                    => $this->sanitize_normalized_float( isset( $layer_raw['w'] ) ? $layer_raw['w'] : 0.45, 0.45, 0.03, 1 ),
 					'h'                    => $this->sanitize_normalized_float( isset( $layer_raw['h'] ) ? $layer_raw['h'] : 0.45, 0.45, 0.03, 1 ),
-					'z'                    => max( -50, min( 100, isset( $layer_raw['z'] ) ? (int) $layer_raw['z'] : (int) $line_index ) ),
-					'remove_background'    => ! empty( $layer_raw['remove_background'] ) ? 'true' : 'false',
+					'z'                    => max( -100, min( 300, isset( $layer_raw['z'] ) ? (int) $layer_raw['z'] : (int) $line_index ) ),
+					'rotation'             => max( -180, min( 180, isset( $layer_raw['rotation'] ) ? (float) $layer_raw['rotation'] : 0 ) ),
+					'opacity'              => $this->sanitize_normalized_float( isset( $layer_raw['opacity'] ) ? $layer_raw['opacity'] : 1, 1, 0, 1 ),
+					'crop_x'               => $this->sanitize_normalized_float( isset( $layer_raw['crop_x'] ) ? $layer_raw['crop_x'] : 0, 0, 0, 0.95 ),
+					'crop_y'               => $this->sanitize_normalized_float( isset( $layer_raw['crop_y'] ) ? $layer_raw['crop_y'] : 0, 0, 0, 0.95 ),
+					'crop_w'               => $this->sanitize_normalized_float( isset( $layer_raw['crop_w'] ) ? $layer_raw['crop_w'] : 1, 1, 0.05, 1 ),
+					'crop_h'               => $this->sanitize_normalized_float( isset( $layer_raw['crop_h'] ) ? $layer_raw['crop_h'] : 1, 1, 0.05, 1 ),
+					'fit'                  => $this->sanitize_bundle_manual_fit( isset( $layer_raw['fit'] ) ? $layer_raw['fit'] : 'contain' ),
+					'flip_x'               => $this->sanitize_bundle_bool_string( isset( $layer_raw['flip_x'] ) ? $layer_raw['flip_x'] : false ),
+					'flip_y'               => $this->sanitize_bundle_bool_string( isset( $layer_raw['flip_y'] ) ? $layer_raw['flip_y'] : false ),
+					'locked'               => $this->sanitize_bundle_bool_string( isset( $layer_raw['locked'] ) ? $layer_raw['locked'] : false ),
+					'hidden'               => $this->sanitize_bundle_bool_string( isset( $layer_raw['hidden'] ) ? $layer_raw['hidden'] : false ),
+					'name'                 => isset( $layer_raw['name'] ) ? sanitize_text_field( (string) $layer_raw['name'] ) : '',
+					'shadow'               => $this->sanitize_bundle_manual_layer_shadow( isset( $layer_raw['shadow'] ) ? $layer_raw['shadow'] : 'inherit' ),
+					'border'               => $this->sanitize_bundle_manual_layer_border( isset( $layer_raw['border'] ) ? $layer_raw['border'] : 'inherit' ),
+					'remove_background'    => $this->sanitize_bundle_bool_string( isset( $layer_raw['remove_background'] ) ? $layer_raw['remove_background'] : false ),
 					'background_tolerance' => max( 0, min( 100, isset( $layer_raw['background_tolerance'] ) ? absint( $layer_raw['background_tolerance'] ) : 12 ) ),
 				);
 			}
@@ -274,7 +307,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				}
 
 				$layer_raw = is_array( $layer_raw ) ? $layer_raw : array();
-				$text      = isset( $layer_raw['text'] ) ? sanitize_text_field( (string) $layer_raw['text'] ) : '';
+				$text      = isset( $layer_raw['text'] ) ? sanitize_textarea_field( (string) $layer_raw['text'] ) : '';
 				if ( '' === $text ) {
 					continue;
 				}
@@ -290,11 +323,19 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					'text'      => $text,
 					'x'         => $this->sanitize_normalized_float( isset( $layer_raw['x'] ) ? $layer_raw['x'] : 0.08, 0.08 ),
 					'y'         => $this->sanitize_normalized_float( isset( $layer_raw['y'] ) ? $layer_raw['y'] : 0.08, 0.08 ),
+					'w'         => $this->sanitize_normalized_float( isset( $layer_raw['w'] ) ? $layer_raw['w'] : 0.42, 0.42, 0.05, 1 ),
+					'h'         => $this->sanitize_normalized_float( isset( $layer_raw['h'] ) ? $layer_raw['h'] : 0.16, 0.16, 0.04, 1 ),
 					'font_size' => max( 10, min( 260, isset( $layer_raw['font_size'] ) ? absint( $layer_raw['font_size'] ) : 64 ) ),
 					'color'     => $color,
 					'align'     => $align,
-					'bold'      => ! empty( $layer_raw['bold'] ) ? 'true' : 'false',
-					'z'         => max( -50, min( 150, isset( $layer_raw['z'] ) ? (int) $layer_raw['z'] : 50 ) ),
+					'bold'      => $this->sanitize_bundle_bool_string( isset( $layer_raw['bold'] ) ? $layer_raw['bold'] : false ),
+					'z'         => max( -100, min( 300, isset( $layer_raw['z'] ) ? (int) $layer_raw['z'] : 50 ) ),
+					'rotation'  => max( -180, min( 180, isset( $layer_raw['rotation'] ) ? (float) $layer_raw['rotation'] : 0 ) ),
+					'opacity'   => $this->sanitize_normalized_float( isset( $layer_raw['opacity'] ) ? $layer_raw['opacity'] : 1, 1, 0, 1 ),
+					'line_height' => $this->sanitize_normalized_float( isset( $layer_raw['line_height'] ) ? $layer_raw['line_height'] : 1.12, 1.12, 0.8, 2 ),
+					'locked'    => $this->sanitize_bundle_bool_string( isset( $layer_raw['locked'] ) ? $layer_raw['locked'] : false ),
+					'hidden'    => $this->sanitize_bundle_bool_string( isset( $layer_raw['hidden'] ) ? $layer_raw['hidden'] : false ),
+					'name'      => isset( $layer_raw['name'] ) ? sanitize_text_field( (string) $layer_raw['name'] ) : '',
 				);
 			}
 
@@ -972,11 +1013,32 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							<button type="button" class="button button-link-delete" id="lp_reset_manual_image_editor" hidden><?php echo esc_html__( 'Reset manual layout', 'lp-bundle-builder' ); ?></button>
 						</p>
 						<div id="lp_manual_image_editor" class="lp-manual-editor" hidden>
-							<div class="lp-manual-canvas-wrap">
-								<div id="lp_manual_image_canvas" class="lp-manual-canvas" aria-label="<?php echo esc_attr__( 'Manual bundle image editor', 'lp-bundle-builder' ); ?>"></div>
+							<div class="lp-manual-toolbar" role="toolbar" aria-label="<?php echo esc_attr__( 'Manual image editor tools', 'lp-bundle-builder' ); ?>">
+								<button type="button" class="button button-secondary" id="lp_manual_undo" disabled><?php echo esc_html__( 'Undo', 'lp-bundle-builder' ); ?></button>
+								<button type="button" class="button button-secondary" id="lp_manual_redo" disabled><?php echo esc_html__( 'Redo', 'lp-bundle-builder' ); ?></button>
+								<button type="button" class="button button-secondary" id="lp_manual_duplicate"><?php echo esc_html__( 'Duplicate', 'lp-bundle-builder' ); ?></button>
+								<button type="button" class="button button-secondary" id="lp_manual_delete"><?php echo esc_html__( 'Delete', 'lp-bundle-builder' ); ?></button>
+								<button type="button" class="button button-secondary" id="lp_manual_zoom_out"><?php echo esc_html__( '-', 'lp-bundle-builder' ); ?></button>
+								<span id="lp_manual_zoom_label" class="lp-manual-toolbar-status">100%</span>
+								<button type="button" class="button button-secondary" id="lp_manual_zoom_in"><?php echo esc_html__( '+', 'lp-bundle-builder' ); ?></button>
+								<label class="lp-manual-toolbar-toggle"><input type="checkbox" id="lp_manual_snap" checked /> <?php echo esc_html__( 'Snap', 'lp-bundle-builder' ); ?></label>
+								<label class="lp-manual-toolbar-toggle"><input type="checkbox" id="lp_manual_grid" checked /> <?php echo esc_html__( 'Grid', 'lp-bundle-builder' ); ?></label>
+								<button type="button" class="button button-secondary" id="lp_manual_reset_view"><?php echo esc_html__( 'Reset view', 'lp-bundle-builder' ); ?></button>
 							</div>
-							<div id="lp_manual_layer_controls" class="lp-manual-controls">
-								<p class="description"><?php echo esc_html__( 'Select a product or text layer to adjust exact placement.', 'lp-bundle-builder' ); ?></p>
+							<div class="lp-manual-workspace">
+								<aside class="lp-manual-sidebar">
+									<h3><?php echo esc_html__( 'Layers', 'lp-bundle-builder' ); ?></h3>
+									<div id="lp_manual_layer_list" class="lp-manual-layer-list"></div>
+								</aside>
+								<div class="lp-manual-stage">
+									<div id="lp_manual_stage_viewport" class="lp-manual-stage-viewport">
+										<div id="lp_manual_image_canvas" class="lp-manual-canvas" aria-label="<?php echo esc_attr__( 'Manual bundle image editor', 'lp-bundle-builder' ); ?>"></div>
+									</div>
+									<p id="lp_manual_editor_status" class="description"></p>
+								</div>
+								<aside id="lp_manual_layer_controls" class="lp-manual-controls">
+									<p class="description"><?php echo esc_html__( 'Select a product or text layer to adjust exact placement.', 'lp-bundle-builder' ); ?></p>
+								</aside>
 							</div>
 						</div>
 						<p class="lp-composite-preview-actions">
@@ -1087,41 +1149,131 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					height: auto;
 				}
 				.lp-manual-editor {
-					display: grid;
-					grid-template-columns: minmax(320px, 640px) minmax(260px, 1fr);
-					gap: 16px;
-					align-items: start;
 					background: #fff;
 					border: 1px solid #ccd0d4;
-					padding: 14px;
 					margin: 12px 0;
+					min-width: 0;
 				}
-				.lp-manual-canvas-wrap { width: 100%; }
+				.lp-manual-toolbar {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 8px;
+					align-items: center;
+					padding: 10px;
+					border-bottom: 1px solid #dcdcde;
+					background: #f6f7f7;
+				}
+				.lp-manual-toolbar-status {
+					min-width: 48px;
+					text-align: center;
+					font-weight: 600;
+				}
+				.lp-manual-toolbar-toggle {
+					display: inline-flex;
+					gap: 5px;
+					align-items: center;
+					font-weight: 600;
+				}
+				.lp-manual-workspace {
+					display: grid;
+					grid-template-columns: minmax(180px, 240px) minmax(360px, 1fr) minmax(280px, 360px);
+					min-height: 620px;
+				}
+				.lp-manual-sidebar,
+				.lp-manual-controls {
+					padding: 12px;
+					background: #fff;
+					overflow: auto;
+				}
+				.lp-manual-sidebar { border-right: 1px solid #dcdcde; }
+				.lp-manual-controls { border-left: 1px solid #dcdcde; }
+				.lp-manual-layer-list {
+					display: grid;
+					gap: 7px;
+				}
+				.lp-manual-layer-row {
+					display: grid;
+					grid-template-columns: 1fr auto auto;
+					gap: 4px;
+					align-items: center;
+					width: 100%;
+					border: 1px solid #dcdcde;
+					background: #fff;
+					padding: 6px;
+					border-radius: 4px;
+				}
+				.lp-manual-layer-row.is-selected {
+					border-color: #2271b1;
+					box-shadow: 0 0 0 1px #2271b1 inset;
+				}
+				.lp-manual-layer-row-name {
+					border: 0;
+					background: transparent;
+					text-align: left;
+					cursor: pointer;
+					font-weight: 600;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				}
+				.lp-manual-layer-row button {
+					min-width: 28px;
+					height: 28px;
+					padding: 0 5px;
+				}
+				.lp-manual-stage {
+					display: grid;
+					grid-template-rows: 1fr auto;
+					background: #e8eaed;
+					min-width: 0;
+				}
+				.lp-manual-stage-viewport {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					overflow: auto;
+					padding: 30px;
+					min-height: 560px;
+				}
 				.lp-manual-canvas {
 					position: relative;
-					width: 100%;
+					width: min(640px, 100%);
 					aspect-ratio: 1 / 1;
 					background: #fff;
-					border: 1px solid #8c8f94;
+					box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
 					overflow: hidden;
 					user-select: none;
 					touch-action: none;
+					transform-origin: center center;
+				}
+				.lp-manual-canvas.show-grid {
+					background-image:
+						linear-gradient(rgba(34, 113, 177, 0.14) 1px, transparent 1px),
+						linear-gradient(90deg, rgba(34, 113, 177, 0.14) 1px, transparent 1px);
+					background-size: 10% 10%;
 				}
 				.lp-manual-layer {
 					position: absolute;
 					box-sizing: border-box;
-					border: 1px dashed #2271b1;
-					background: rgba(255, 255, 255, 0.72);
+					border: 1px dashed rgba(34, 113, 177, 0.78);
+					background: rgba(255, 255, 255, 0.18);
 					cursor: move;
 					overflow: hidden;
+					transform-origin: center center;
 				}
-				.lp-manual-layer.is-selected { border: 2px solid #2271b1; box-shadow: 0 0 0 1px #fff inset; }
+				.lp-manual-layer.is-hidden-layer { opacity: 0.38 !important; }
+				.lp-manual-layer.is-locked-layer { cursor: default; }
+				.lp-manual-layer.is-selected {
+					border: 2px solid #2271b1;
+					box-shadow: 0 0 0 1px #fff inset, 0 0 0 9999px rgba(34, 113, 177, 0.015);
+				}
 				.lp-manual-layer img {
 					display: block;
 					width: 100%;
 					height: 100%;
 					object-fit: contain;
 					pointer-events: none;
+					transform-origin: center center;
 				}
 				.lp-manual-layer-label {
 					position: absolute;
@@ -1142,20 +1294,28 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					border-color: #8a2be2;
 					color: #111;
 					white-space: pre-wrap;
-					overflow: visible;
+					overflow: hidden;
+					line-height: 1.12;
 				}
-				.lp-manual-resize {
+				.lp-manual-resize,
+				.lp-manual-rotate {
 					position: absolute;
-					right: 0;
-					bottom: 0;
 					width: 14px;
 					height: 14px;
 					background: #2271b1;
+					border: 2px solid #fff;
+					box-sizing: border-box;
+				}
+				.lp-manual-resize {
+					right: -1px;
+					bottom: -1px;
 					cursor: nwse-resize;
 				}
-				.lp-manual-controls {
-					border-left: 1px solid #dcdcde;
-					padding-left: 14px;
+				.lp-manual-rotate {
+					top: -26px;
+					left: calc(50% - 7px);
+					border-radius: 50%;
+					cursor: grab;
 				}
 				.lp-manual-controls label { display: block; font-weight: 600; margin: 10px 0 4px; }
 				.lp-manual-control-grid {
@@ -1163,14 +1323,22 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					grid-template-columns: repeat(2, minmax(90px, 1fr));
 					gap: 8px;
 				}
+				.lp-manual-control-actions {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 8px;
+					margin-top: 10px;
+				}
 				.lp-manual-control-grid input,
 				.lp-manual-controls input[type="text"],
 				.lp-manual-controls input[type="number"],
 				.lp-manual-controls textarea,
 				.lp-manual-controls select { width: 100%; }
 				@media (max-width: 900px) {
-					.lp-manual-editor { grid-template-columns: 1fr; }
-					.lp-manual-controls { border-left: 0; border-top: 1px solid #dcdcde; padding-left: 0; padding-top: 12px; }
+					.lp-manual-workspace { grid-template-columns: 1fr; }
+					.lp-manual-sidebar,
+					.lp-manual-controls { border: 0; border-top: 1px solid #dcdcde; }
+					.lp-manual-stage-viewport { min-height: 420px; padding: 18px; }
 				}
 			</style>
 
@@ -1202,13 +1370,30 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				const resetManualEditorButton = document.getElementById('lp_reset_manual_image_editor');
 				const manualEditor = document.getElementById('lp_manual_image_editor');
 				const manualCanvas = document.getElementById('lp_manual_image_canvas');
+				const manualStageViewport = document.getElementById('lp_manual_stage_viewport');
 				const manualLayerControls = document.getElementById('lp_manual_layer_controls');
+				const manualLayerList = document.getElementById('lp_manual_layer_list');
+				const manualEditorStatus = document.getElementById('lp_manual_editor_status');
+				const manualUndoButton = document.getElementById('lp_manual_undo');
+				const manualRedoButton = document.getElementById('lp_manual_redo');
+				const manualDuplicateButton = document.getElementById('lp_manual_duplicate');
+				const manualDeleteButton = document.getElementById('lp_manual_delete');
+				const manualZoomInButton = document.getElementById('lp_manual_zoom_in');
+				const manualZoomOutButton = document.getElementById('lp_manual_zoom_out');
+				const manualZoomLabel = document.getElementById('lp_manual_zoom_label');
+				const manualSnapToggle = document.getElementById('lp_manual_snap');
+				const manualGridToggle = document.getElementById('lp_manual_grid');
+				const manualResetViewButton = document.getElementById('lp_manual_reset_view');
 				const imagePromptTextarea = document.getElementById('lp-image-prompt-textarea');
 				const copyImagePromptButton = document.getElementById('lp-copy-image-prompt');
 				const selectImagePromptButton = document.getElementById('lp-select-image-prompt');
 				let parts = [];
 				let manualSetup = { product_layers: {}, text_layers: [] };
 				let selectedManualLayer = null;
+				let manualHistory = [];
+				let manualFuture = [];
+				let manualZoom = 1;
+				let isApplyingManualHistory = false;
 
 				function clamp(value, min, max){
 					value = Number(value);
@@ -1226,7 +1411,21 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						y: clamp(layer.y ?? fallback.y ?? 0.08, 0, 1),
 						w: clamp(layer.w ?? fallback.w ?? 0.42, 0.03, 1),
 						h: clamp(layer.h ?? fallback.h ?? 0.42, 0.03, 1),
-						z: Math.round(clamp(layer.z ?? fallback.z ?? 0, -50, 150)),
+						z: Math.round(clamp(layer.z ?? fallback.z ?? 0, -100, 300)),
+						rotation: clamp(layer.rotation ?? fallback.rotation ?? 0, -180, 180),
+						opacity: clamp(layer.opacity ?? fallback.opacity ?? 1, 0, 1),
+						crop_x: clamp(layer.crop_x ?? fallback.crop_x ?? 0, 0, 0.95),
+						crop_y: clamp(layer.crop_y ?? fallback.crop_y ?? 0, 0, 0.95),
+						crop_w: clamp(layer.crop_w ?? fallback.crop_w ?? 1, 0.05, 1),
+						crop_h: clamp(layer.crop_h ?? fallback.crop_h ?? 1, 0.05, 1),
+						fit: ['contain', 'cover', 'stretch'].includes(layer.fit) ? layer.fit : (fallback.fit || 'contain'),
+						flip_x: !!(layer.flip_x === true || layer.flip_x === 'true' || layer.flip_x === 1 || layer.flip_x === '1'),
+						flip_y: !!(layer.flip_y === true || layer.flip_y === 'true' || layer.flip_y === 1 || layer.flip_y === '1'),
+						locked: !!(layer.locked === true || layer.locked === 'true' || layer.locked === 1 || layer.locked === '1'),
+						hidden: !!(layer.hidden === true || layer.hidden === 'true' || layer.hidden === 1 || layer.hidden === '1'),
+						name: String(layer.name || fallback.name || ''),
+						shadow: ['inherit', 'none', 'soft', 'strong'].includes(layer.shadow) ? layer.shadow : (fallback.shadow || 'inherit'),
+						border: ['inherit', 'none', 'thin'].includes(layer.border) ? layer.border : (fallback.border || 'inherit'),
 						remove_background: !!(layer.remove_background === true || layer.remove_background === 'true' || layer.remove_background === 1 || layer.remove_background === '1'),
 						background_tolerance: Math.round(clamp(layer.background_tolerance ?? fallback.background_tolerance ?? 12, 0, 100))
 					};
@@ -1238,17 +1437,102 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						text: String(layer.text || ''),
 						x: clamp(layer.x ?? 0.08, 0, 1),
 						y: clamp(layer.y ?? 0.08, 0, 1),
+						w: clamp(layer.w ?? 0.42, 0.05, 1),
+						h: clamp(layer.h ?? 0.16, 0.04, 1),
 						font_size: Math.round(clamp(layer.font_size ?? 64, 10, 260)),
 						color: /^#[0-9a-fA-F]{6}$/.test(String(layer.color || '')) ? String(layer.color) : '#111111',
 						align: ['left', 'center', 'right'].includes(layer.align) ? layer.align : 'left',
 						bold: !!(layer.bold === true || layer.bold === 'true' || layer.bold === 1 || layer.bold === '1'),
-						z: Math.round(clamp(layer.z ?? 50, -50, 150))
+						z: Math.round(clamp(layer.z ?? 50, -100, 300)),
+						rotation: clamp(layer.rotation ?? 0, -180, 180),
+						opacity: clamp(layer.opacity ?? 1, 0, 1),
+						line_height: clamp(layer.line_height ?? 1.12, 0.8, 2),
+						locked: !!(layer.locked === true || layer.locked === 'true' || layer.locked === 1 || layer.locked === '1'),
+						hidden: !!(layer.hidden === true || layer.hidden === 'true' || layer.hidden === 1 || layer.hidden === '1'),
+						name: String(layer.name || '')
 					};
 				}
 
 				function syncManualSetupInput(){
 					if (manualSetupInput) {
 						manualSetupInput.value = JSON.stringify(manualSetup || { product_layers: {}, text_layers: [] });
+					}
+				}
+
+				function cloneManualSetup(){
+					return JSON.parse(JSON.stringify(manualSetup || { product_layers: {}, text_layers: [] }));
+				}
+
+				function pushManualHistory(){
+					if (isApplyingManualHistory) {
+						return;
+					}
+					manualHistory.push(JSON.stringify(cloneManualSetup()));
+					if (manualHistory.length > 60) {
+						manualHistory.shift();
+					}
+					manualFuture = [];
+					updateManualHistoryButtons();
+				}
+
+				function updateManualHistoryButtons(){
+					if (manualUndoButton) {
+						manualUndoButton.disabled = manualHistory.length < 2;
+					}
+					if (manualRedoButton) {
+						manualRedoButton.disabled = manualFuture.length < 1;
+					}
+					if (manualDuplicateButton) {
+						manualDuplicateButton.disabled = !selectedManualLayer;
+					}
+					if (manualDeleteButton) {
+						manualDeleteButton.disabled = !selectedManualLayer;
+					}
+				}
+
+				function restoreManualSnapshot(snapshot){
+					try {
+						isApplyingManualHistory = true;
+						manualSetup = JSON.parse(snapshot);
+						ensureManualSetup();
+						renderManualEditor();
+						clearPreview();
+						setPreviewStatus('');
+					} catch (e) {
+					} finally {
+						isApplyingManualHistory = false;
+						updateManualHistoryButtons();
+					}
+				}
+
+				function recordManualChange(){
+					syncManualSetupInput();
+					pushManualHistory();
+					clearPreview();
+					setPreviewStatus('');
+				}
+
+				function manualLayerKey(type, index){
+					return type + ':' + String(index);
+				}
+
+				function getSelectedManualLayerData(){
+					if (!selectedManualLayer) {
+						return null;
+					}
+					if (selectedManualLayer.type === 'product') {
+						const key = String(selectedManualLayer.index);
+						return normalizeLayer(manualSetup.product_layers[key], getDefaultManualLayer(selectedManualLayer.index, parts.length));
+					}
+					if (selectedManualLayer.type === 'text') {
+						return normalizeTextLayer(manualSetup.text_layers[selectedManualLayer.index] || {});
+					}
+					return null;
+				}
+
+				function setManualEditorStatus(message){
+					if (manualEditorStatus) {
+						manualEditorStatus.textContent = message || '';
 					}
 				}
 
@@ -1294,6 +1578,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					const canvasControl = document.getElementById('lp_bundle_composite_canvas');
 					const value = canvasControl ? canvasControl.value : 'square';
 					manualCanvas.style.aspectRatio = value === 'landscape' ? '3 / 2' : (value === 'portrait' ? '2 / 3' : '1 / 1');
+					manualCanvas.style.width = value === 'portrait' ? 'min(480px, 100%)' : (value === 'landscape' ? 'min(720px, 100%)' : 'min(640px, 100%)');
 				}
 
 				function setManualCanvasBackground(){
@@ -1302,7 +1587,27 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					}
 					const backgroundControl = document.getElementById('lp_bundle_composite_background');
 					const value = backgroundControl ? backgroundControl.value : 'white';
-					manualCanvas.style.background = value === 'gray' ? '#f1f2f3' : (value === 'warm' ? '#f7f7f4' : '#ffffff');
+					manualCanvas.style.backgroundColor = value === 'gray' ? '#f1f2f3' : (value === 'warm' ? '#f7f7f4' : '#ffffff');
+				}
+
+				function applyManualCanvasView(){
+					if (!manualCanvas) {
+						return;
+					}
+					manualZoom = clamp(manualZoom, 0.35, 2.5);
+					manualCanvas.style.transform = 'scale(' + manualZoom + ')';
+					manualCanvas.classList.toggle('show-grid', !!(manualGridToggle && manualGridToggle.checked));
+					if (manualZoomLabel) {
+						manualZoomLabel.textContent = Math.round(manualZoom * 100) + '%';
+					}
+				}
+
+				function snapManualValue(value, step){
+					if (!manualSnapToggle || !manualSnapToggle.checked) {
+						return value;
+					}
+					step = step || 0.01;
+					return Math.round(value / step) * step;
 				}
 
 				async function copyTextareaContent(textarea){
@@ -1651,10 +1956,12 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 				function selectManualLayer(type, index){
 					selectedManualLayer = { type: type, index: index };
+					setManualEditorStatus('');
 					renderManualEditor();
 				}
 
-				function updateManualLayer(type, index, patch){
+				function updateManualLayer(type, index, patch, options){
+					options = options || {};
 					if (type === 'product') {
 						const key = String(index);
 						manualSetup.product_layers[key] = normalizeLayer(Object.assign({}, manualSetup.product_layers[key] || {}, patch));
@@ -1663,24 +1970,68 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					}
 					syncManualSetupInput();
 					renderManualEditor();
-					clearPreview();
-					setPreviewStatus('');
+					if (options.commit) {
+						recordManualChange();
+					} else if (!options.previewKeep) {
+						clearPreview();
+						setPreviewStatus('');
+					}
 				}
 
-				function buildManualNumberField(labelText, value, onChange){
+				function buildManualNumberField(labelText, value, onChange, options){
+					options = options || {};
 					const wrap = document.createElement('div');
 					const label = document.createElement('label');
 					label.textContent = labelText;
 					const input = document.createElement('input');
 					input.type = 'number';
-					input.step = '1';
-					input.value = String(Math.round(Number(value) || 0));
+					input.step = options.step || '1';
+					if (typeof options.min !== 'undefined') {
+						input.min = String(options.min);
+					}
+					if (typeof options.max !== 'undefined') {
+						input.max = String(options.max);
+					}
+					input.value = options.decimals ? String(Number(value || 0).toFixed(options.decimals)) : String(Math.round(Number(value) || 0));
 					input.addEventListener('change', function(){
 						onChange(Number(input.value || 0));
 					});
 					wrap.appendChild(label);
 					wrap.appendChild(input);
 					return wrap;
+				}
+
+				function buildManualSelectField(labelText, value, values, onChange){
+					const wrap = document.createElement('div');
+					const label = document.createElement('label');
+					label.textContent = labelText;
+					const select = document.createElement('select');
+					values.forEach(function(item){
+						const option = document.createElement('option');
+						option.value = item.value;
+						option.textContent = item.label;
+						option.selected = item.value === value;
+						select.appendChild(option);
+					});
+					select.addEventListener('change', function(){
+						onChange(select.value);
+					});
+					wrap.appendChild(label);
+					wrap.appendChild(select);
+					return wrap;
+				}
+
+				function buildManualCheckbox(labelText, checked, onChange){
+					const label = document.createElement('label');
+					const input = document.createElement('input');
+					input.type = 'checkbox';
+					input.checked = !!checked;
+					input.addEventListener('change', function(){
+						onChange(input.checked);
+					});
+					label.appendChild(input);
+					label.appendChild(document.createTextNode(' ' + labelText));
+					return label;
 				}
 
 				function renderManualControls(){
@@ -1692,8 +2043,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					if (!selectedManualLayer) {
 						const p = document.createElement('p');
 						p.className = 'description';
-						p.textContent = '<?php echo esc_js( __( 'Select a product or text layer to adjust exact placement.', 'lp-bundle-builder' ) ); ?>';
+						p.textContent = '<?php echo esc_js( __( 'Select a product or text layer to adjust placement and styling.', 'lp-bundle-builder' ) ); ?>';
 						manualLayerControls.appendChild(p);
+						updateManualHistoryButtons();
 						return;
 					}
 
@@ -1709,29 +2061,60 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						? normalizeLayer(manualSetup.product_layers[String(index)], getDefaultManualLayer(index, parts.length))
 						: normalizeTextLayer(manualSetup.text_layers[index] || {});
 
+					const nameLabel = document.createElement('label');
+					nameLabel.textContent = '<?php echo esc_js( __( 'Layer name', 'lp-bundle-builder' ) ); ?>';
+					const nameInput = document.createElement('input');
+					nameInput.type = 'text';
+					nameInput.value = layer.name || '';
+					nameInput.placeholder = type === 'product' && parts[index] && parts[index].defaultProduct ? parts[index].defaultProduct.label : heading.textContent;
+					nameInput.addEventListener('change', function(){
+						updateManualLayer(type, index, { name: nameInput.value }, { commit: true });
+					});
+					manualLayerControls.appendChild(nameLabel);
+					manualLayerControls.appendChild(nameInput);
+
 					const grid = document.createElement('div');
 					grid.className = 'lp-manual-control-grid';
-					grid.appendChild(buildManualNumberField('X %', layer.x * 100, value => updateManualLayer(type, index, { x: clamp(value / 100, 0, 1) })));
-					grid.appendChild(buildManualNumberField('Y %', layer.y * 100, value => updateManualLayer(type, index, { y: clamp(value / 100, 0, 1) })));
-					if (type === 'product') {
-						grid.appendChild(buildManualNumberField('Width %', layer.w * 100, value => updateManualLayer(type, index, { w: clamp(value / 100, 0.03, 1) })));
-						grid.appendChild(buildManualNumberField('Height %', layer.h * 100, value => updateManualLayer(type, index, { h: clamp(value / 100, 0.03, 1) })));
-					}
-					grid.appendChild(buildManualNumberField('Layer order', layer.z, value => updateManualLayer(type, index, { z: value })));
+					grid.appendChild(buildManualNumberField('X %', layer.x * 100, value => updateManualLayer(type, index, { x: clamp(value / 100, 0, 1) }, { commit: true })));
+					grid.appendChild(buildManualNumberField('Y %', layer.y * 100, value => updateManualLayer(type, index, { y: clamp(value / 100, 0, 1) }, { commit: true })));
+					grid.appendChild(buildManualNumberField('Width %', layer.w * 100, value => updateManualLayer(type, index, { w: clamp(value / 100, type === 'product' ? 0.03 : 0.05, 1) }, { commit: true })));
+					grid.appendChild(buildManualNumberField('Height %', layer.h * 100, value => updateManualLayer(type, index, { h: clamp(value / 100, type === 'product' ? 0.03 : 0.04, 1) }, { commit: true })));
+					grid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Rotation', 'lp-bundle-builder' ) ); ?>', layer.rotation, value => updateManualLayer(type, index, { rotation: clamp(value, -180, 180) }, { commit: true }), { min: -180, max: 180 }));
+					grid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Opacity %', 'lp-bundle-builder' ) ); ?>', layer.opacity * 100, value => updateManualLayer(type, index, { opacity: clamp(value / 100, 0, 1) }, { commit: true }), { min: 0, max: 100 }));
+					grid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Layer order', 'lp-bundle-builder' ) ); ?>', layer.z, value => updateManualLayer(type, index, { z: value }, { commit: true })));
 					manualLayerControls.appendChild(grid);
 
 					if (type === 'product') {
-						const bgLabel = document.createElement('label');
-						const bgToggle = document.createElement('input');
-						bgToggle.type = 'checkbox';
-						bgToggle.checked = !!layer.remove_background;
-						bgToggle.addEventListener('change', function(){
-							updateManualLayer('product', index, { remove_background: bgToggle.checked });
-						});
-						bgLabel.appendChild(bgToggle);
-						bgLabel.appendChild(document.createTextNode(' <?php echo esc_js( __( 'Remove white background', 'lp-bundle-builder' ) ); ?>'));
-						manualLayerControls.appendChild(bgLabel);
-						const tolerance = buildManualNumberField('<?php echo esc_js( __( 'Background tolerance', 'lp-bundle-builder' ) ); ?>', layer.background_tolerance, value => updateManualLayer('product', index, { background_tolerance: clamp(value, 0, 100) }));
+						manualLayerControls.appendChild(buildManualSelectField('<?php echo esc_js( __( 'Fit mode', 'lp-bundle-builder' ) ); ?>', layer.fit, [
+							{ value: 'contain', label: '<?php echo esc_js( __( 'Contain', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'cover', label: '<?php echo esc_js( __( 'Cover', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'stretch', label: '<?php echo esc_js( __( 'Stretch', 'lp-bundle-builder' ) ); ?>' }
+						], value => updateManualLayer('product', index, { fit: value }, { commit: true })));
+
+						const cropGrid = document.createElement('div');
+						cropGrid.className = 'lp-manual-control-grid';
+						cropGrid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Crop X %', 'lp-bundle-builder' ) ); ?>', layer.crop_x * 100, value => updateManualLayer('product', index, { crop_x: clamp(value / 100, 0, 0.95) }, { commit: true }), { min: 0, max: 95 }));
+						cropGrid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Crop Y %', 'lp-bundle-builder' ) ); ?>', layer.crop_y * 100, value => updateManualLayer('product', index, { crop_y: clamp(value / 100, 0, 0.95) }, { commit: true }), { min: 0, max: 95 }));
+						cropGrid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Crop W %', 'lp-bundle-builder' ) ); ?>', layer.crop_w * 100, value => updateManualLayer('product', index, { crop_w: clamp(value / 100, 0.05, 1) }, { commit: true }), { min: 5, max: 100 }));
+						cropGrid.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Crop H %', 'lp-bundle-builder' ) ); ?>', layer.crop_h * 100, value => updateManualLayer('product', index, { crop_h: clamp(value / 100, 0.05, 1) }, { commit: true }), { min: 5, max: 100 }));
+						manualLayerControls.appendChild(cropGrid);
+
+						manualLayerControls.appendChild(buildManualSelectField('<?php echo esc_js( __( 'Layer shadow', 'lp-bundle-builder' ) ); ?>', layer.shadow, [
+							{ value: 'inherit', label: '<?php echo esc_js( __( 'Use global', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'none', label: '<?php echo esc_js( __( 'None', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'soft', label: '<?php echo esc_js( __( 'Soft', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'strong', label: '<?php echo esc_js( __( 'Strong', 'lp-bundle-builder' ) ); ?>' }
+						], value => updateManualLayer('product', index, { shadow: value }, { commit: true })));
+						manualLayerControls.appendChild(buildManualSelectField('<?php echo esc_js( __( 'Layer border', 'lp-bundle-builder' ) ); ?>', layer.border, [
+							{ value: 'inherit', label: '<?php echo esc_js( __( 'Use global', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'none', label: '<?php echo esc_js( __( 'None', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'thin', label: '<?php echo esc_js( __( 'Thin', 'lp-bundle-builder' ) ); ?>' }
+						], value => updateManualLayer('product', index, { border: value }, { commit: true })));
+
+						manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Flip horizontal', 'lp-bundle-builder' ) ); ?>', layer.flip_x, value => updateManualLayer('product', index, { flip_x: value }, { commit: true })));
+						manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Flip vertical', 'lp-bundle-builder' ) ); ?>', layer.flip_y, value => updateManualLayer('product', index, { flip_y: value }, { commit: true })));
+						manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Remove white background', 'lp-bundle-builder' ) ); ?>', layer.remove_background, value => updateManualLayer('product', index, { remove_background: value }, { commit: true })));
+						const tolerance = buildManualNumberField('<?php echo esc_js( __( 'Background tolerance', 'lp-bundle-builder' ) ); ?>', layer.background_tolerance, value => updateManualLayer('product', index, { background_tolerance: clamp(value, 0, 100) }, { commit: true }), { min: 0, max: 100 });
 						manualLayerControls.appendChild(tolerance);
 					} else {
 						const textLabel = document.createElement('label');
@@ -1740,11 +2123,12 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						textarea.rows = 3;
 						textarea.value = layer.text;
 						textarea.addEventListener('change', function(){
-							updateManualLayer('text', index, { text: textarea.value });
+							updateManualLayer('text', index, { text: textarea.value }, { commit: true });
 						});
 						manualLayerControls.appendChild(textLabel);
 						manualLayerControls.appendChild(textarea);
-						manualLayerControls.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Font size', 'lp-bundle-builder' ) ); ?>', layer.font_size, value => updateManualLayer('text', index, { font_size: clamp(value, 10, 260) })));
+						manualLayerControls.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Font size', 'lp-bundle-builder' ) ); ?>', layer.font_size, value => updateManualLayer('text', index, { font_size: clamp(value, 10, 260) }, { commit: true }), { min: 10, max: 260 }));
+						manualLayerControls.appendChild(buildManualNumberField('<?php echo esc_js( __( 'Line height', 'lp-bundle-builder' ) ); ?>', layer.line_height, value => updateManualLayer('text', index, { line_height: clamp(value, 0.8, 2) }, { commit: true }), { step: '0.05', min: 0.8, max: 2, decimals: 2 }));
 
 						const colorLabel = document.createElement('label');
 						colorLabel.textContent = '<?php echo esc_js( __( 'Color', 'lp-bundle-builder' ) ); ?>';
@@ -1752,56 +2136,50 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						colorInput.type = 'color';
 						colorInput.value = layer.color;
 						colorInput.addEventListener('change', function(){
-							updateManualLayer('text', index, { color: colorInput.value });
+							updateManualLayer('text', index, { color: colorInput.value }, { commit: true });
 						});
 						manualLayerControls.appendChild(colorLabel);
 						manualLayerControls.appendChild(colorInput);
 
-						const alignLabel = document.createElement('label');
-						alignLabel.textContent = '<?php echo esc_js( __( 'Align', 'lp-bundle-builder' ) ); ?>';
-						const alignSelect = document.createElement('select');
-						['left', 'center', 'right'].forEach(function(value){
-							const option = document.createElement('option');
-							option.value = value;
-							option.textContent = value;
-							option.selected = value === layer.align;
-							alignSelect.appendChild(option);
-						});
-						alignSelect.addEventListener('change', function(){
-							updateManualLayer('text', index, { align: alignSelect.value });
-						});
-						manualLayerControls.appendChild(alignLabel);
-						manualLayerControls.appendChild(alignSelect);
-
-						const boldLabel = document.createElement('label');
-						const boldToggle = document.createElement('input');
-						boldToggle.type = 'checkbox';
-						boldToggle.checked = !!layer.bold;
-						boldToggle.addEventListener('change', function(){
-							updateManualLayer('text', index, { bold: boldToggle.checked });
-						});
-						boldLabel.appendChild(boldToggle);
-						boldLabel.appendChild(document.createTextNode(' <?php echo esc_js( __( 'Bold', 'lp-bundle-builder' ) ); ?>'));
-						manualLayerControls.appendChild(boldLabel);
-
-						const removeButton = document.createElement('button');
-						removeButton.type = 'button';
-						removeButton.className = 'button button-link-delete';
-						removeButton.textContent = '<?php echo esc_js( __( 'Remove text layer', 'lp-bundle-builder' ) ); ?>';
-						removeButton.addEventListener('click', function(){
-							manualSetup.text_layers.splice(index, 1);
-							selectedManualLayer = null;
-							syncManualSetupInput();
-							renderManualEditor();
-							clearPreview();
-						});
-						manualLayerControls.appendChild(removeButton);
+						manualLayerControls.appendChild(buildManualSelectField('<?php echo esc_js( __( 'Align', 'lp-bundle-builder' ) ); ?>', layer.align, [
+							{ value: 'left', label: '<?php echo esc_js( __( 'Left', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'center', label: '<?php echo esc_js( __( 'Center', 'lp-bundle-builder' ) ); ?>' },
+							{ value: 'right', label: '<?php echo esc_js( __( 'Right', 'lp-bundle-builder' ) ); ?>' }
+						], value => updateManualLayer('text', index, { align: value }, { commit: true })));
+						manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Bold', 'lp-bundle-builder' ) ); ?>', layer.bold, value => updateManualLayer('text', index, { bold: value }, { commit: true })));
 					}
+
+					manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Lock layer', 'lp-bundle-builder' ) ); ?>', layer.locked, value => updateManualLayer(type, index, { locked: value }, { commit: true })));
+					manualLayerControls.appendChild(buildManualCheckbox('<?php echo esc_js( __( 'Hide layer', 'lp-bundle-builder' ) ); ?>', layer.hidden, value => updateManualLayer(type, index, { hidden: value }, { commit: true })));
+
+					const actions = document.createElement('div');
+					actions.className = 'lp-manual-control-actions';
+					const duplicate = document.createElement('button');
+					duplicate.type = 'button';
+					duplicate.className = 'button button-secondary';
+					duplicate.textContent = '<?php echo esc_js( __( 'Duplicate', 'lp-bundle-builder' ) ); ?>';
+					duplicate.addEventListener('click', duplicateSelectedManualLayer);
+					const remove = document.createElement('button');
+					remove.type = 'button';
+					remove.className = 'button button-link-delete';
+					remove.textContent = type === 'text' ? '<?php echo esc_js( __( 'Remove text layer', 'lp-bundle-builder' ) ); ?>' : '<?php echo esc_js( __( 'Hide product layer', 'lp-bundle-builder' ) ); ?>';
+					remove.addEventListener('click', deleteSelectedManualLayer);
+					actions.appendChild(duplicate);
+					actions.appendChild(remove);
+					manualLayerControls.appendChild(actions);
+					updateManualHistoryButtons();
 				}
 
 				function beginManualDrag(event, type, index, mode){
 					event.preventDefault();
 					event.stopPropagation();
+					const current = type === 'product'
+						? normalizeLayer(manualSetup.product_layers[String(index)], getDefaultManualLayer(index, parts.length))
+						: normalizeTextLayer(manualSetup.text_layers[index] || {});
+					if (current.locked) {
+						selectManualLayer(type, index);
+						return;
+					}
 					const canvasRect = manualCanvas.getBoundingClientRect();
 					const startX = event.clientX;
 					const startY = event.clientY;
@@ -1809,31 +2187,152 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					const startLayer = type === 'product'
 						? normalizeLayer(manualSetup.product_layers[key], getDefaultManualLayer(index, parts.length))
 						: normalizeTextLayer(manualSetup.text_layers[index] || {});
+					const startSnapshot = JSON.stringify(cloneManualSetup());
+					const centerX = canvasRect.left + (startLayer.x + (startLayer.w / 2)) * canvasRect.width;
+					const centerY = canvasRect.top + (startLayer.y + (startLayer.h / 2)) * canvasRect.height;
 
 					function move(moveEvent){
 						const dx = (moveEvent.clientX - startX) / canvasRect.width;
 						const dy = (moveEvent.clientY - startY) / canvasRect.height;
-						if (mode === 'resize' && type === 'product') {
+						if (mode === 'resize') {
 							updateManualLayer(type, index, {
-								w: clamp(startLayer.w + dx, 0.03, 1),
-								h: clamp(startLayer.h + dy, 0.03, 1)
-							});
+								w: clamp(snapManualValue(startLayer.w + dx), type === 'product' ? 0.03 : 0.05, 1),
+								h: clamp(snapManualValue(startLayer.h + dy), type === 'product' ? 0.03 : 0.04, 1)
+							}, { previewKeep: true });
+						} else if (mode === 'rotate') {
+							const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * 180 / Math.PI + 90;
+							const snappedAngle = manualSnapToggle && manualSnapToggle.checked ? Math.round(angle / 5) * 5 : angle;
+							updateManualLayer(type, index, {
+								rotation: clamp(snappedAngle, -180, 180)
+							}, { previewKeep: true });
 						} else {
 							updateManualLayer(type, index, {
-								x: clamp(startLayer.x + dx, 0, 1),
-								y: clamp(startLayer.y + dy, 0, 1)
-							});
+								x: clamp(snapManualValue(startLayer.x + dx), 0, 1),
+								y: clamp(snapManualValue(startLayer.y + dy), 0, 1)
+							}, { previewKeep: true });
 						}
 					}
 
 					function end(){
 						document.removeEventListener('mousemove', move);
 						document.removeEventListener('mouseup', end);
+						if (startSnapshot !== JSON.stringify(cloneManualSetup())) {
+							pushManualHistory();
+							clearPreview();
+							setPreviewStatus('');
+						}
 					}
 
 					selectManualLayer(type, index);
 					document.addEventListener('mousemove', move);
 					document.addEventListener('mouseup', end);
+				}
+
+				function getManualEntries(){
+					ensureManualSetup();
+					const productEntries = parts.map(function(part, index){
+						const layer = normalizeLayer(manualSetup.product_layers[String(index)], getDefaultManualLayer(index, parts.length));
+						return { type: 'product', index: index, key: manualLayerKey('product', index), layer: layer, part: part };
+					});
+					const textEntries = manualSetup.text_layers.map(function(layer, index){
+						return { type: 'text', index: index, key: manualLayerKey('text', index), layer: normalizeTextLayer(layer), part: null };
+					});
+					return productEntries.concat(textEntries).sort(function(a, b){
+						if ((a.layer.z || 0) === (b.layer.z || 0)) {
+							return a.key.localeCompare(b.key);
+						}
+						return (a.layer.z || 0) - (b.layer.z || 0);
+					});
+				}
+
+				function getManualLayerLabel(entry){
+					if (!entry) {
+						return '';
+					}
+					if (entry.layer.name) {
+						return entry.layer.name;
+					}
+					if (entry.type === 'product') {
+						const product = entry.part && entry.part.defaultProduct ? entry.part.defaultProduct : null;
+						return product && product.label ? product.label : ('<?php echo esc_js( __( 'Product line', 'lp-bundle-builder' ) ); ?> ' + (entry.index + 1));
+					}
+					return entry.layer.text ? entry.layer.text.split('\n')[0] : ('<?php echo esc_js( __( 'Text layer', 'lp-bundle-builder' ) ); ?> ' + (entry.index + 1));
+				}
+
+				function renderManualLayerList(){
+					if (!manualLayerList) {
+						return;
+					}
+					manualLayerList.innerHTML = '';
+					getManualEntries().slice().reverse().forEach(function(entry){
+						const row = document.createElement('div');
+						row.className = 'lp-manual-layer-row';
+						if (selectedManualLayer && selectedManualLayer.type === entry.type && Number(selectedManualLayer.index) === Number(entry.index)) {
+							row.className += ' is-selected';
+						}
+						const name = document.createElement('button');
+						name.type = 'button';
+						name.className = 'lp-manual-layer-row-name';
+						name.textContent = getManualLayerLabel(entry);
+						name.title = name.textContent;
+						name.addEventListener('click', function(){
+							selectManualLayer(entry.type, entry.index);
+						});
+						const visibility = document.createElement('button');
+						visibility.type = 'button';
+						visibility.className = 'button button-secondary';
+						visibility.textContent = entry.layer.hidden ? '<?php echo esc_js( __( 'Show', 'lp-bundle-builder' ) ); ?>' : '<?php echo esc_js( __( 'Hide', 'lp-bundle-builder' ) ); ?>';
+						visibility.addEventListener('click', function(){
+							updateManualLayer(entry.type, entry.index, { hidden: !entry.layer.hidden }, { commit: true });
+						});
+						const lock = document.createElement('button');
+						lock.type = 'button';
+						lock.className = 'button button-secondary';
+						lock.textContent = entry.layer.locked ? '<?php echo esc_js( __( 'Unlock', 'lp-bundle-builder' ) ); ?>' : '<?php echo esc_js( __( 'Lock', 'lp-bundle-builder' ) ); ?>';
+						lock.addEventListener('click', function(){
+							updateManualLayer(entry.type, entry.index, { locked: !entry.layer.locked }, { commit: true });
+						});
+						row.appendChild(name);
+						row.appendChild(visibility);
+						row.appendChild(lock);
+						manualLayerList.appendChild(row);
+					});
+				}
+
+				function duplicateSelectedManualLayer(){
+					if (!selectedManualLayer) {
+						return;
+					}
+					if (selectedManualLayer.type === 'text') {
+						const layer = normalizeTextLayer(manualSetup.text_layers[selectedManualLayer.index] || {});
+						manualSetup.text_layers.push(normalizeTextLayer(Object.assign({}, layer, {
+							x: clamp(layer.x + 0.04, 0, 1),
+							y: clamp(layer.y + 0.04, 0, 1),
+							z: layer.z + 1,
+							name: layer.name ? layer.name + ' copy' : ''
+						})));
+						selectedManualLayer = { type: 'text', index: manualSetup.text_layers.length - 1 };
+					} else {
+						setManualEditorStatus('<?php echo esc_js( __( 'Product layers are tied to bundle lines and cannot be duplicated separately. Add another bundle line if you need another product layer.', 'lp-bundle-builder' ) ); ?>');
+						return;
+					}
+					recordManualChange();
+					renderManualEditor();
+				}
+
+				function deleteSelectedManualLayer(){
+					if (!selectedManualLayer) {
+						return;
+					}
+					if (selectedManualLayer.type === 'text') {
+						manualSetup.text_layers.splice(selectedManualLayer.index, 1);
+						selectedManualLayer = null;
+					} else {
+						updateManualLayer('product', selectedManualLayer.index, { hidden: true }, { commit: true });
+						return;
+					}
+					recordManualChange();
+					renderManualEditor();
 				}
 
 				function renderManualEditor(){
@@ -1845,29 +2344,29 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					ensureManualSetup();
 					setManualCanvasAspect();
 					setManualCanvasBackground();
+					applyManualCanvasView();
 					manualCanvas.innerHTML = '';
 
-					const productEntries = parts.map(function(part, index){
-						const layer = normalizeLayer(manualSetup.product_layers[String(index)], getDefaultManualLayer(index, parts.length));
-						return { type: 'product', index: index, layer: layer, part: part };
-					});
-					const textEntries = manualSetup.text_layers.map(function(layer, index){
-						return { type: 'text', index: index, layer: normalizeTextLayer(layer) };
-					});
-					productEntries.concat(textEntries).sort(function(a, b){
-						return (a.layer.z || 0) - (b.layer.z || 0);
-					}).forEach(function(entry){
+					getManualEntries().forEach(function(entry){
 						const layer = entry.layer;
 						const el = document.createElement('div');
 						el.className = 'lp-manual-layer' + (entry.type === 'text' ? ' lp-manual-text-layer' : '');
 						if (selectedManualLayer && selectedManualLayer.type === entry.type && Number(selectedManualLayer.index) === Number(entry.index)) {
 							el.className += ' is-selected';
 						}
+						if (layer.hidden) {
+							el.className += ' is-hidden-layer';
+						}
+						if (layer.locked) {
+							el.className += ' is-locked-layer';
+						}
 						el.style.left = (layer.x * 100) + '%';
 						el.style.top = (layer.y * 100) + '%';
-						el.style.width = ((entry.type === 'text' ? 0.35 : layer.w) * 100) + '%';
-						el.style.height = ((entry.type === 'text' ? Math.max(0.08, layer.font_size / 700) : layer.h) * 100) + '%';
+						el.style.width = (layer.w * 100) + '%';
+						el.style.height = (layer.h * 100) + '%';
 						el.style.zIndex = String((layer.z || 0) + 100);
+						el.style.opacity = String(layer.opacity);
+						el.style.transform = 'rotate(' + layer.rotation + 'deg)';
 						el.addEventListener('mousedown', function(event){
 							beginManualDrag(event, entry.type, entry.index, 'drag');
 						});
@@ -1878,24 +2377,36 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								const img = document.createElement('img');
 								img.src = product.imageUrl;
 								img.alt = product.label || '';
+								img.style.objectFit = layer.fit === 'stretch' ? 'fill' : layer.fit;
+								img.style.transform = 'scale(' + (layer.flip_x ? '-1' : '1') + ', ' + (layer.flip_y ? '-1' : '1') + ')';
 								el.appendChild(img);
 							}
 							const label = document.createElement('span');
 							label.className = 'lp-manual-layer-label';
-							label.textContent = product && product.label ? product.label : ('<?php echo esc_js( __( 'Product line', 'lp-bundle-builder' ) ); ?> ' + (entry.index + 1));
+							label.textContent = getManualLayerLabel(entry);
 							el.appendChild(label);
-							const resize = document.createElement('span');
-							resize.className = 'lp-manual-resize';
-							resize.addEventListener('mousedown', function(event){
-								beginManualDrag(event, 'product', entry.index, 'resize');
-							});
-							el.appendChild(resize);
 						} else {
 							el.textContent = layer.text;
-							el.style.fontSize = Math.max(10, Math.round(layer.font_size * 0.4)) + 'px';
+							el.style.fontSize = Math.max(10, Math.round(layer.font_size * 0.34)) + 'px';
 							el.style.color = layer.color;
 							el.style.textAlign = layer.align;
 							el.style.fontWeight = layer.bold ? '700' : '400';
+							el.style.lineHeight = String(layer.line_height);
+						}
+
+						if (!layer.locked) {
+							const resize = document.createElement('span');
+							resize.className = 'lp-manual-resize';
+							resize.addEventListener('mousedown', function(event){
+								beginManualDrag(event, entry.type, entry.index, 'resize');
+							});
+							el.appendChild(resize);
+							const rotate = document.createElement('span');
+							rotate.className = 'lp-manual-rotate';
+							rotate.addEventListener('mousedown', function(event){
+								beginManualDrag(event, entry.type, entry.index, 'rotate');
+							});
+							el.appendChild(rotate);
 						}
 
 						el.addEventListener('click', function(event){
@@ -1905,7 +2416,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						manualCanvas.appendChild(el);
 					});
 
+					renderManualLayerList();
 					renderManualControls();
+					updateManualHistoryButtons();
 				}
 
 				function render(){
@@ -2016,6 +2529,110 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					});
 				}
 
+				if (manualUndoButton) {
+					manualUndoButton.addEventListener('click', function(){
+						if (manualHistory.length < 2) {
+							return;
+						}
+						const current = manualHistory.pop();
+						manualFuture.push(current);
+						restoreManualSnapshot(manualHistory[manualHistory.length - 1]);
+					});
+				}
+
+				if (manualRedoButton) {
+					manualRedoButton.addEventListener('click', function(){
+						if (!manualFuture.length) {
+							return;
+						}
+						const snapshot = manualFuture.pop();
+						manualHistory.push(snapshot);
+						restoreManualSnapshot(snapshot);
+					});
+				}
+
+				if (manualDuplicateButton) {
+					manualDuplicateButton.addEventListener('click', duplicateSelectedManualLayer);
+				}
+
+				if (manualDeleteButton) {
+					manualDeleteButton.addEventListener('click', deleteSelectedManualLayer);
+				}
+
+				if (manualZoomInButton) {
+					manualZoomInButton.addEventListener('click', function(){
+						manualZoom = clamp(manualZoom + 0.1, 0.35, 2.5);
+						applyManualCanvasView();
+					});
+				}
+
+				if (manualZoomOutButton) {
+					manualZoomOutButton.addEventListener('click', function(){
+						manualZoom = clamp(manualZoom - 0.1, 0.35, 2.5);
+						applyManualCanvasView();
+					});
+				}
+
+				if (manualResetViewButton) {
+					manualResetViewButton.addEventListener('click', function(){
+						manualZoom = 1;
+						if (manualStageViewport) {
+							manualStageViewport.scrollTop = 0;
+							manualStageViewport.scrollLeft = 0;
+						}
+						applyManualCanvasView();
+					});
+				}
+
+				if (manualGridToggle) {
+					manualGridToggle.addEventListener('change', applyManualCanvasView);
+				}
+
+				document.addEventListener('keydown', function(event){
+					if (!manualEditor || manualEditor.hidden || !selectedManualLayer) {
+						return;
+					}
+					const target = event.target;
+					if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+						return;
+					}
+					const layer = getSelectedManualLayerData();
+					if (!layer || layer.locked) {
+						return;
+					}
+					const step = event.shiftKey ? 0.025 : 0.005;
+					if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+						event.preventDefault();
+						const patch = {};
+						if (event.key === 'ArrowLeft') {
+							patch.x = clamp(layer.x - step, 0, 1);
+						}
+						if (event.key === 'ArrowRight') {
+							patch.x = clamp(layer.x + step, 0, 1);
+						}
+						if (event.key === 'ArrowUp') {
+							patch.y = clamp(layer.y - step, 0, 1);
+						}
+						if (event.key === 'ArrowDown') {
+							patch.y = clamp(layer.y + step, 0, 1);
+						}
+						updateManualLayer(selectedManualLayer.type, selectedManualLayer.index, patch, { commit: true });
+					} else if (event.key === 'Delete' || event.key === 'Backspace') {
+						event.preventDefault();
+						deleteSelectedManualLayer();
+					} else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
+						event.preventDefault();
+						duplicateSelectedManualLayer();
+					} else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+						event.preventDefault();
+						if (event.shiftKey && manualRedoButton) {
+							manualRedoButton.click();
+						} else if (manualUndoButton) {
+							manualUndoButton.click();
+						}
+					}
+				});
+
 				if (openManualEditorButton && manualEditor) {
 					openManualEditorButton.addEventListener('click', function(){
 						const layout = document.getElementById('lp_bundle_composite_layout');
@@ -2030,6 +2647,9 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							resetManualEditorButton.hidden = false;
 						}
 						ensureManualSetup();
+						if (!manualHistory.length) {
+							manualHistory.push(JSON.stringify(cloneManualSetup()));
+						}
 						renderManualEditor();
 						clearPreview();
 						setPreviewStatus('');
@@ -2049,14 +2669,18 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 							text: '<?php echo esc_js( __( 'Bundle offer', 'lp-bundle-builder' ) ); ?>',
 							x: 0.08,
 							y: 0.08,
+							w: 0.42,
+							h: 0.16,
 							font_size: 72,
 							color: '#111111',
 							align: 'left',
 							bold: true,
+							line_height: 1.12,
 							z: 80
 						}));
 						selectedManualLayer = { type: 'text', index: manualSetup.text_layers.length - 1 };
 						ensureManualSetup();
+						recordManualChange();
 						renderManualEditor();
 						clearPreview();
 					});
@@ -2065,6 +2689,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				if (resetManualEditorButton) {
 					resetManualEditorButton.addEventListener('click', function(){
 						manualSetup = { product_layers: {}, text_layers: [] };
+						manualHistory = [];
+						manualFuture = [];
 						selectedManualLayer = null;
 						const layout = document.getElementById('lp_bundle_composite_layout');
 						if (layout) {
@@ -3878,6 +4504,103 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 		}
 
+		private function apply_bundle_composite_layer_opacity( $image, $opacity ) {
+			$opacity = max( 0, min( 1, (float) $opacity ) );
+			if ( ! $image || $opacity >= 1 ) {
+				return;
+			}
+
+			try {
+				if ( defined( 'Imagick::ALPHACHANNEL_ACTIVATE' ) ) {
+					$image->setImageAlphaChannel( \Imagick::ALPHACHANNEL_ACTIVATE );
+				}
+				if ( defined( 'Imagick::EVALUATE_MULTIPLY' ) && defined( 'Imagick::CHANNEL_ALPHA' ) ) {
+					$image->evaluateImage( \Imagick::EVALUATE_MULTIPLY, $opacity, \Imagick::CHANNEL_ALPHA );
+				}
+			} catch ( \Exception $exception ) {
+				return;
+			}
+		}
+
+		private function prepare_bundle_composite_product_layer( $image, $slot ) {
+			if ( ! $image ) {
+				return $image;
+			}
+
+			$slot_w = max( 1, (int) round( $slot['w'] ) );
+			$slot_h = max( 1, (int) round( $slot['h'] ) );
+			$fit    = isset( $slot['fit'] ) ? (string) $slot['fit'] : 'contain';
+
+			try {
+				$crop_x = max( 0, min( 0.95, isset( $slot['crop_x'] ) ? (float) $slot['crop_x'] : 0 ) );
+				$crop_y = max( 0, min( 0.95, isset( $slot['crop_y'] ) ? (float) $slot['crop_y'] : 0 ) );
+				$crop_w = max( 0.05, min( 1, isset( $slot['crop_w'] ) ? (float) $slot['crop_w'] : 1 ) );
+				$crop_h = max( 0.05, min( 1, isset( $slot['crop_h'] ) ? (float) $slot['crop_h'] : 1 ) );
+				$crop_w = min( $crop_w, 1 - $crop_x );
+				$crop_h = min( $crop_h, 1 - $crop_y );
+
+				if ( $crop_x > 0 || $crop_y > 0 || $crop_w < 1 || $crop_h < 1 ) {
+					$source_w = max( 1, $image->getImageWidth() );
+					$source_h = max( 1, $image->getImageHeight() );
+					$image->cropImage(
+						max( 1, (int) round( $source_w * $crop_w ) ),
+						max( 1, (int) round( $source_h * $crop_h ) ),
+						max( 0, (int) round( $source_w * $crop_x ) ),
+						max( 0, (int) round( $source_h * $crop_y ) )
+					);
+					$image->setImagePage( 0, 0, 0, 0 );
+				}
+
+				if ( ! empty( $slot['flip_x'] ) ) {
+					$image->flopImage();
+				}
+				if ( ! empty( $slot['flip_y'] ) ) {
+					$image->flipImage();
+				}
+
+				if ( 'stretch' === $fit ) {
+					$image->resizeImage( $slot_w, $slot_h, \Imagick::FILTER_LANCZOS, 1, false );
+				} elseif ( 'cover' === $fit ) {
+					$image->cropThumbnailImage( $slot_w, $slot_h );
+				} else {
+					$image->thumbnailImage( $slot_w, $slot_h, true, true );
+				}
+
+				$rotation = isset( $slot['rotation'] ) ? (float) $slot['rotation'] : 0;
+				if ( abs( $rotation ) > 0.01 ) {
+					$image->setImageBackgroundColor( new \ImagickPixel( 'transparent' ) );
+					$image->rotateImage( new \ImagickPixel( 'transparent' ), $rotation );
+					$image->setImagePage( 0, 0, 0, 0 );
+				}
+
+				$this->apply_bundle_composite_layer_opacity( $image, isset( $slot['opacity'] ) ? $slot['opacity'] : 1 );
+			} catch ( \Exception $exception ) {
+				return $image;
+			}
+
+			return $image;
+		}
+
+		private function draw_bundle_composite_layer_border( $canvas, $x, $y, $w, $h, $border ) {
+			$border = sanitize_key( (string) $border );
+			if ( 'thin' !== $border || ! class_exists( 'ImagickDraw' ) ) {
+				return;
+			}
+
+			try {
+				$draw = new \ImagickDraw();
+				$draw->setFillOpacity( 0 );
+				$draw->setStrokeColor( new \ImagickPixel( '#dedede' ) );
+				$draw->setStrokeWidth( 2 );
+				$draw->rectangle( (int) $x, (int) $y, (int) ( $x + $w ), (int) ( $y + $h ) );
+				$canvas->drawImage( $draw );
+				$draw->clear();
+				$draw->destroy();
+			} catch ( \Exception $exception ) {
+				return;
+			}
+		}
+
 		private function get_bundle_manual_product_slots( $count, $canvas_width, $canvas_height, $options ) {
 			$options = $this->sanitize_bundle_composite_options( (array) $options );
 			$manual_setup = isset( $options['manual_setup'] ) && is_array( $options['manual_setup'] ) ? $options['manual_setup'] : array();
@@ -3905,6 +4628,18 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$slot = $this->normalize_bundle_composite_slot( $slot, $canvas_width, $canvas_height );
 				$slot['index'] = $index;
 				$slot['z'] = isset( $layer['z'] ) ? (int) $layer['z'] : $index;
+				$slot['rotation'] = isset( $layer['rotation'] ) ? (float) $layer['rotation'] : 0;
+				$slot['opacity'] = isset( $layer['opacity'] ) ? (float) $layer['opacity'] : 1;
+				$slot['crop_x'] = isset( $layer['crop_x'] ) ? (float) $layer['crop_x'] : 0;
+				$slot['crop_y'] = isset( $layer['crop_y'] ) ? (float) $layer['crop_y'] : 0;
+				$slot['crop_w'] = isset( $layer['crop_w'] ) ? (float) $layer['crop_w'] : 1;
+				$slot['crop_h'] = isset( $layer['crop_h'] ) ? (float) $layer['crop_h'] : 1;
+				$slot['fit'] = isset( $layer['fit'] ) ? (string) $layer['fit'] : 'contain';
+				$slot['flip_x'] = isset( $layer['flip_x'] ) && 'true' === (string) $layer['flip_x'];
+				$slot['flip_y'] = isset( $layer['flip_y'] ) && 'true' === (string) $layer['flip_y'];
+				$slot['hidden'] = isset( $layer['hidden'] ) && 'true' === (string) $layer['hidden'];
+				$slot['shadow'] = isset( $layer['shadow'] ) ? (string) $layer['shadow'] : 'inherit';
+				$slot['border'] = isset( $layer['border'] ) ? (string) $layer['border'] : 'inherit';
 				$slot['remove_background'] = isset( $layer['remove_background'] ) && 'true' === (string) $layer['remove_background'];
 				$slot['background_tolerance'] = isset( $layer['background_tolerance'] ) ? absint( $layer['background_tolerance'] ) : 12;
 				$slots[] = $slot;
@@ -3923,52 +4658,105 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			return $slots;
 		}
 
-		private function draw_bundle_composite_text_layers( $canvas, $options, $canvas_width, $canvas_height ) {
-			$manual_setup = isset( $options['manual_setup'] ) && is_array( $options['manual_setup'] ) ? $options['manual_setup'] : array();
-			$text_layers = isset( $manual_setup['text_layers'] ) && is_array( $manual_setup['text_layers'] ) ? $manual_setup['text_layers'] : array();
-			if ( empty( $text_layers ) || ! class_exists( 'ImagickDraw' ) ) {
+		private function wrap_bundle_composite_text_lines( $image, $draw, $text, $max_width ) {
+			$wrapped = array();
+			$paragraphs = preg_split( "/\r\n|\n|\r/", (string) $text );
+			foreach ( $paragraphs as $paragraph ) {
+				$paragraph = trim( $paragraph );
+				if ( '' === $paragraph ) {
+					$wrapped[] = '';
+					continue;
+				}
+
+				$line = '';
+				$words = preg_split( '/\s+/', $paragraph );
+				foreach ( $words as $word ) {
+					$test = '' === $line ? $word : $line . ' ' . $word;
+					$metrics = $image->queryFontMetrics( $draw, $test );
+					if ( ! empty( $line ) && isset( $metrics['textWidth'] ) && $metrics['textWidth'] > $max_width ) {
+						$wrapped[] = $line;
+						$line = $word;
+					} else {
+						$line = $test;
+					}
+				}
+				if ( '' !== $line ) {
+					$wrapped[] = $line;
+				}
+			}
+
+			return $wrapped;
+		}
+
+		private function composite_bundle_composite_text_layer( $canvas, $layer, $canvas_width, $canvas_height ) {
+			if ( ! class_exists( 'ImagickDraw' ) || ! class_exists( 'Imagick' ) ) {
 				return;
 			}
 
-			usort(
-				$text_layers,
-				function( $a, $b ) {
-					return ( isset( $a['z'] ) ? (int) $a['z'] : 0 ) - ( isset( $b['z'] ) ? (int) $b['z'] : 0 );
+			$text = isset( $layer['text'] ) ? trim( (string) $layer['text'] ) : '';
+			if ( '' === $text || ( isset( $layer['hidden'] ) && 'true' === (string) $layer['hidden'] ) ) {
+				return;
+			}
+
+			try {
+				$box_w = max( 1, (int) round( $this->sanitize_normalized_float( isset( $layer['w'] ) ? $layer['w'] : 0.42, 0.42, 0.05, 1 ) * $canvas_width ) );
+				$box_h = max( 1, (int) round( $this->sanitize_normalized_float( isset( $layer['h'] ) ? $layer['h'] : 0.16, 0.16, 0.04, 1 ) * $canvas_height ) );
+				$text_image = new \Imagick();
+				$text_image->newImage( $box_w, $box_h, new \ImagickPixel( 'transparent' ) );
+				$text_image->setImageFormat( 'png' );
+
+				$draw = new \ImagickDraw();
+				$draw->setFillColor( new \ImagickPixel( isset( $layer['color'] ) ? (string) $layer['color'] : '#111111' ) );
+				$font_size = max( 10, min( 260, isset( $layer['font_size'] ) ? absint( $layer['font_size'] ) : 64 ) );
+				$line_height = max( 0.8, min( 2, isset( $layer['line_height'] ) ? (float) $layer['line_height'] : 1.12 ) );
+				$draw->setFontSize( $font_size );
+				if ( isset( $layer['bold'] ) && 'true' === (string) $layer['bold'] && method_exists( $draw, 'setFontWeight' ) ) {
+					$draw->setFontWeight( 700 );
 				}
-			);
 
-			foreach ( $text_layers as $layer ) {
-				$text = isset( $layer['text'] ) ? trim( (string) $layer['text'] ) : '';
-				if ( '' === $text ) {
-					continue;
-				}
-
-				try {
-					$draw = new \ImagickDraw();
-					$draw->setFillColor( new \ImagickPixel( isset( $layer['color'] ) ? (string) $layer['color'] : '#111111' ) );
-					$font_size = isset( $layer['font_size'] ) ? absint( $layer['font_size'] ) : 64;
-					$draw->setFontSize( max( 10, min( 260, $font_size ) ) );
-					if ( isset( $layer['bold'] ) && 'true' === (string) $layer['bold'] && method_exists( $draw, 'setFontWeight' ) ) {
-						$draw->setFontWeight( 700 );
-					}
-
-					$align = isset( $layer['align'] ) ? (string) $layer['align'] : 'left';
-					if ( 'center' === $align && defined( 'Imagick::ALIGN_CENTER' ) ) {
-						$draw->setTextAlignment( \Imagick::ALIGN_CENTER );
-					} elseif ( 'right' === $align && defined( 'Imagick::ALIGN_RIGHT' ) ) {
-						$draw->setTextAlignment( \Imagick::ALIGN_RIGHT );
-					} elseif ( defined( 'Imagick::ALIGN_LEFT' ) ) {
+				$align = isset( $layer['align'] ) ? (string) $layer['align'] : 'left';
+				if ( 'center' === $align && defined( 'Imagick::ALIGN_CENTER' ) ) {
+					$draw->setTextAlignment( \Imagick::ALIGN_CENTER );
+					$text_x = $box_w / 2;
+				} elseif ( 'right' === $align && defined( 'Imagick::ALIGN_RIGHT' ) ) {
+					$draw->setTextAlignment( \Imagick::ALIGN_RIGHT );
+					$text_x = $box_w;
+				} else {
+					if ( defined( 'Imagick::ALIGN_LEFT' ) ) {
 						$draw->setTextAlignment( \Imagick::ALIGN_LEFT );
 					}
-
-					$x = $this->sanitize_normalized_float( isset( $layer['x'] ) ? $layer['x'] : 0.08, 0.08 ) * $canvas_width;
-					$y = ( $this->sanitize_normalized_float( isset( $layer['y'] ) ? $layer['y'] : 0.08, 0.08 ) * $canvas_height ) + max( 10, min( 260, $font_size ) );
-					$canvas->annotateImage( $draw, (int) round( $x ), (int) round( $y ), 0, $text );
-					$draw->clear();
-					$draw->destroy();
-				} catch ( \Exception $exception ) {
-					continue;
+					$text_x = 0;
 				}
+
+				$lines = $this->wrap_bundle_composite_text_lines( $text_image, $draw, $text, $box_w );
+				$line_y = $font_size;
+				foreach ( $lines as $line ) {
+					if ( $line_y > $box_h ) {
+						break;
+					}
+					if ( '' !== $line ) {
+						$text_image->annotateImage( $draw, (int) round( $text_x ), (int) round( $line_y ), 0, $line );
+					}
+					$line_y += $font_size * $line_height;
+				}
+
+				$draw->clear();
+				$draw->destroy();
+				$this->apply_bundle_composite_layer_opacity( $text_image, isset( $layer['opacity'] ) ? (float) $layer['opacity'] : 1 );
+				$rotation = isset( $layer['rotation'] ) ? (float) $layer['rotation'] : 0;
+				if ( abs( $rotation ) > 0.01 ) {
+					$text_image->setImageBackgroundColor( new \ImagickPixel( 'transparent' ) );
+					$text_image->rotateImage( new \ImagickPixel( 'transparent' ), $rotation );
+					$text_image->setImagePage( 0, 0, 0, 0 );
+				}
+
+				$x = (int) round( $this->sanitize_normalized_float( isset( $layer['x'] ) ? $layer['x'] : 0.08, 0.08 ) * $canvas_width );
+				$y = (int) round( $this->sanitize_normalized_float( isset( $layer['y'] ) ? $layer['y'] : 0.08, 0.08 ) * $canvas_height );
+				$canvas->compositeImage( $text_image, \Imagick::COMPOSITE_OVER, $x, $y );
+				$text_image->clear();
+				$text_image->destroy();
+			} catch ( \Exception $exception ) {
+				return;
 			}
 		}
 
@@ -4000,14 +4788,56 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				$canvas->setImageFormat( 'jpeg' );
 				$canvas->setImageColorspace( \Imagick::COLORSPACE_SRGB );
 
+				$render_entries = array();
 				foreach ( $slots as $slot_index => $slot ) {
-					$image_index = isset( $slot['index'] ) ? (int) $slot['index'] : (int) $slot_index;
+					$render_entries[] = array(
+						'type'  => 'product',
+						'z'     => isset( $slot['z'] ) ? (int) $slot['z'] : (int) $slot_index,
+						'order' => $slot_index,
+						'slot'  => $slot,
+					);
+				}
+				if ( 'manual' === $options['layout'] ) {
+					$manual_setup = isset( $options['manual_setup'] ) && is_array( $options['manual_setup'] ) ? $options['manual_setup'] : array();
+					$text_layers  = isset( $manual_setup['text_layers'] ) && is_array( $manual_setup['text_layers'] ) ? $manual_setup['text_layers'] : array();
+					foreach ( $text_layers as $text_index => $text_layer ) {
+						$render_entries[] = array(
+							'type'  => 'text',
+							'z'     => isset( $text_layer['z'] ) ? (int) $text_layer['z'] : 50,
+							'order' => 1000 + (int) $text_index,
+							'layer' => $text_layer,
+						);
+					}
+					usort(
+						$render_entries,
+						function( $a, $b ) {
+							if ( (int) $a['z'] === (int) $b['z'] ) {
+								return (int) $a['order'] - (int) $b['order'];
+							}
+							return (int) $a['z'] - (int) $b['z'];
+						}
+					);
+				}
+
+				foreach ( $render_entries as $entry ) {
+					if ( 'text' === $entry['type'] ) {
+						$this->composite_bundle_composite_text_layer( $canvas, $entry['layer'], $canvas_width, $canvas_height );
+						continue;
+					}
+
+					$slot = $entry['slot'];
+					if ( ! empty( $slot['hidden'] ) ) {
+						continue;
+					}
+
+					$image_index = isset( $slot['index'] ) ? (int) $slot['index'] : (int) $entry['order'];
 					if ( ! isset( $source_image_paths[ $image_index ] ) ) {
 						continue;
 					}
 
-					if ( 'none' !== $options['box_style'] ) {
-						$border_size = 'border' === $options['box_style'] ? 2 : 0;
+					$layer_border = isset( $slot['border'] ) && 'inherit' !== $slot['border'] ? (string) $slot['border'] : ( 'border' === $options['box_style'] ? 'thin' : 'none' );
+					if ( 'none' !== $options['box_style'] || 'thin' === $layer_border ) {
+						$border_size = 'thin' === $layer_border ? 2 : 0;
 						$box_w       = max( 1, (int) $slot['w'] - ( $border_size * 2 ) );
 						$box_h       = max( 1, (int) $slot['h'] - ( $border_size * 2 ) );
 						$box         = new \Imagick();
@@ -4033,18 +4863,16 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 						$image->trimImage( 4000 );
 						$image->setImagePage( 0, 0, 0, 0 );
 					}
-					$image->thumbnailImage( (int) $slot['w'], (int) $slot['h'], true, true );
 
+					$image = $this->prepare_bundle_composite_product_layer( $image, $slot );
 					$x = (int) $slot['x'] + (int) floor( ( (int) $slot['w'] - $image->getImageWidth() ) / 2 );
 					$y = (int) $slot['y'] + (int) floor( ( (int) $slot['h'] - $image->getImageHeight() ) / 2 );
-					$this->add_bundle_composite_shadow( $canvas, $image, $x, $y, $options['shadow'] );
+					$layer_shadow = isset( $slot['shadow'] ) && 'inherit' !== $slot['shadow'] ? (string) $slot['shadow'] : $options['shadow'];
+					$this->add_bundle_composite_shadow( $canvas, $image, $x, $y, $layer_shadow );
 					$canvas->compositeImage( $image, \Imagick::COMPOSITE_OVER, $x, $y );
+					$this->draw_bundle_composite_layer_border( $canvas, (int) $slot['x'], (int) $slot['y'], (int) $slot['w'], (int) $slot['h'], $layer_border );
 					$image->clear();
 					$image->destroy();
-				}
-
-				if ( 'manual' === $options['layout'] ) {
-					$this->draw_bundle_composite_text_layers( $canvas, $options, $canvas_width, $canvas_height );
 				}
 
 				$canvas->setImageCompressionQuality( 90 );
