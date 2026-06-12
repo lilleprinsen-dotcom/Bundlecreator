@@ -1275,6 +1275,15 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					pointer-events: none;
 					transform-origin: center center;
 				}
+				.lp-manual-layer img.is-burning-background {
+					background-image:
+						linear-gradient(45deg, rgba(0, 0, 0, 0.06) 25%, transparent 25%),
+						linear-gradient(-45deg, rgba(0, 0, 0, 0.06) 25%, transparent 25%),
+						linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.06) 75%),
+						linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.06) 75%);
+					background-size: 16px 16px;
+					background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+				}
 				.lp-manual-layer-label {
 					position: absolute;
 					left: 4px;
@@ -1394,6 +1403,7 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 				let manualFuture = [];
 				let manualZoom = 1;
 				let isApplyingManualHistory = false;
+				const manualBurnerCache = new Map();
 
 				function clamp(value, min, max){
 					value = Number(value);
@@ -1534,6 +1544,79 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 					if (manualEditorStatus) {
 						manualEditorStatus.textContent = message || '';
 					}
+				}
+
+				function getManualBurnedImageUrl(sourceUrl, tolerance){
+					sourceUrl = String(sourceUrl || '');
+					tolerance = Math.round(clamp(tolerance, 0, 100));
+					if (!sourceUrl || tolerance <= 0) {
+						return Promise.resolve(sourceUrl);
+					}
+
+					const cacheKey = sourceUrl + '|' + tolerance;
+					if (manualBurnerCache.has(cacheKey)) {
+						return manualBurnerCache.get(cacheKey);
+					}
+
+					const promise = new Promise(function(resolve){
+						const image = new Image();
+						image.crossOrigin = 'anonymous';
+						image.onload = function(){
+							try {
+								const canvas = document.createElement('canvas');
+								canvas.width = image.naturalWidth || image.width;
+								canvas.height = image.naturalHeight || image.height;
+								const context = canvas.getContext('2d', { willReadFrequently: true });
+								context.drawImage(image, 0, 0);
+								const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+								const data = frame.data;
+								const threshold = Math.round(255 - (tolerance * 1.55));
+								const softness = Math.max(8, Math.round(tolerance * 0.9));
+
+								for (let offset = 0; offset < data.length; offset += 4) {
+									const red = data[offset];
+									const green = data[offset + 1];
+									const blue = data[offset + 2];
+									const minChannel = Math.min(red, green, blue);
+									const maxChannel = Math.max(red, green, blue);
+									const colorSpread = maxChannel - minChannel;
+									if (minChannel >= threshold && colorSpread <= Math.max(18, tolerance)) {
+										data[offset + 3] = 0;
+									} else if (minChannel >= threshold - softness && colorSpread <= Math.max(24, tolerance + 12)) {
+										const fade = clamp((minChannel - (threshold - softness)) / softness, 0, 1);
+										data[offset + 3] = Math.round(data[offset + 3] * (1 - fade));
+									}
+								}
+
+								context.putImageData(frame, 0, 0);
+								resolve(canvas.toDataURL('image/png'));
+							} catch (error) {
+								resolve(sourceUrl);
+							}
+						};
+						image.onerror = function(){
+							resolve(sourceUrl);
+						};
+						image.src = sourceUrl;
+					});
+
+					manualBurnerCache.set(cacheKey, promise);
+					return promise;
+				}
+
+				function applyManualBackgroundBurner(img, sourceUrl, layer){
+					if (!img || !layer || !layer.remove_background) {
+						return;
+					}
+
+					getManualBurnedImageUrl(sourceUrl, layer.background_tolerance).then(function(burnedUrl){
+						if (!img.isConnected || img.dataset.burnSource !== sourceUrl || img.dataset.burnTolerance !== String(layer.background_tolerance)) {
+							return;
+						}
+						if (burnedUrl && burnedUrl !== img.src) {
+							img.src = burnedUrl;
+						}
+					});
 				}
 
 				function getDefaultManualLayer(index, count){
@@ -2379,6 +2462,12 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 								img.alt = product.label || '';
 								img.style.objectFit = layer.fit === 'stretch' ? 'fill' : layer.fit;
 								img.style.transform = 'scale(' + (layer.flip_x ? '-1' : '1') + ', ' + (layer.flip_y ? '-1' : '1') + ')';
+								if (layer.remove_background) {
+									img.dataset.burnSource = product.imageUrl;
+									img.dataset.burnTolerance = String(layer.background_tolerance);
+									img.className = 'is-burning-background';
+									applyManualBackgroundBurner(img, product.imageUrl, layer);
+								}
 								el.appendChild(img);
 							}
 							const label = document.createElement('span');
