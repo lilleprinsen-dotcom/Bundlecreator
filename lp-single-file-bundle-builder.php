@@ -1330,8 +1330,8 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 
 				function normalizeItem(item){
 					return {
-						id: Number(item.value || item.id || item.product_id || 0),
-						label: String(item.label || item.name || ''),
+						id: Number(item.value || item.id || item.product_id || item.term_id || 0),
+						label: String(item.label || item.name || item.title || ''),
 						slug: item.slug ? String(item.slug) : '',
 						name: item.name ? String(item.name) : '',
 						imageUrl: item.image_url || item.imageUrl ? String(item.image_url || item.imageUrl) : ''
@@ -2381,20 +2381,13 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 		}
 
 		private function get_items_with_fallback( $type, $search, $items, $mode ) {
-			if ( 'default_product' === $type ) {
+			if ( in_array( $type, array( 'default_product', 'products' ), true ) ) {
 				return $this->fallback_product_items( $search, $items, $mode );
 			}
 
 			$rest_items = $this->rest_items_request( $type, $search, $items, $mode );
 			if ( ! empty( $rest_items ) ) {
-				if ( 'products' === $type ) {
-					return $this->hydrate_product_item_image_urls( $rest_items );
-				}
 				return $rest_items;
-			}
-
-			if ( 'products' === $type ) {
-				return $this->fallback_product_items( $search, $items, $mode );
 			}
 
 			if ( in_array( $type, array( 'categories', 'tags' ), true ) ) {
@@ -2403,29 +2396,6 @@ if ( ! class_exists( 'LP_Single_File_Bundle_Builder' ) ) {
 			}
 
 			return array();
-		}
-
-		private function hydrate_product_item_image_urls( $items ) {
-			$hydrated_items = array();
-			foreach ( (array) $items as $item ) {
-				if ( ! is_array( $item ) ) {
-					continue;
-				}
-
-				if ( empty( $item['image_url'] ) && empty( $item['imageUrl'] ) ) {
-					$product_id = isset( $item['value'] ) ? absint( $item['value'] ) : ( isset( $item['id'] ) ? absint( $item['id'] ) : 0 );
-					if ( $product_id > 0 ) {
-						$product = wc_get_product( $product_id );
-						if ( $product && is_a( $product, 'WC_Product' ) ) {
-							$item['image_url'] = $this->get_best_product_image_url( $product );
-						}
-					}
-				}
-
-				$hydrated_items[] = $item;
-			}
-
-			return $hydrated_items;
 		}
 
 		private function rest_items_request( $type, $search, $items, $mode ) {
